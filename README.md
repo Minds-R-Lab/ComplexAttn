@@ -155,24 +155,130 @@ answer in our pilot was yes.
 
 ---
 
-## How the experiments fit together
+## Experiment 3 — Rotation mod 3 (does complex *specifically* help?)
 
-| | Experiment 1 (additive) | Experiment 2 (multiplicative) |
-|---|---|---|
-| Architecture | Transformer (softmax attention) | Phase-sum / gated RNN / GRU |
-| Composition | Additive (weights sum to 1) | Multiplicative |
-| OOD generalization | ❌ chance | ✅ near-perfect |
-| Complex helps? | No (no benefit over real) | Yes — *and so does real with right gating* |
+**The setup question Experiment 2 left open.** Exp 2 showed that
+multiplicative composition (any kind — complex phase, GRU gating)
+generalizes, while additive attention does not. But it didn't separate
+"complex" from "multiplicative". The reason: Z/2 has only two elements,
+{+1, −1}, and these live natively in *both* the multiplicative group
+of the reals and the unit circle of the complex numbers. So real sign
+products and complex phase flips solve Z/2 equally well.
 
-The combined story:
+**Z/3 doesn't have this confound.** There is no subgroup of order 3 in
+ℝ* (the multiplicative group of the reals). To represent the cyclic
+group Z/3 inside a network you have three options:
+1. The unit circle (complex), where TWIRL = ×e^{i·2π/3} composes
+   exactly.
+2. Two real dimensions used as a rotation, which is just (1) under a
+   different name.
+3. A non-linear state update (gating) that can implement a 3-state DFA.
 
-> *Complex numbers, by themselves, are not the inductive bias that helps
-> with negation. They are a notation. The inductive bias that helps is
-> multiplicative composition. Whether you get that from complex unit
-> rotations, from real ±1 sign products, or from sigmoid-gated tanh
-> updates is a design choice. What you cannot do is approximate
-> multiplicative composition with softmax-additive attention and expect
-> the algebra to compose at depth — it provably won't.*
+A purely *additive* real architecture with a *linear* readout has none
+of these — and we can prove it fails.
+
+### The task
+
+Same shape as Exp 1/2 with k=mod 3 instead of mod 2:
+
+| token | role |
+|---|---|
+| A0, A1, A2 | three atom classes |
+| TWIRL | rotate the class by +1 (mod 3) |
+| filler | semantically irrelevant |
+
+Label = (atom_class + num_TWIRLs) mod 3. Order randomized. Train
+depths 0–5, eval depths 0–20.
+
+### The architectures
+
+| | composition | readout | predicted |
+|---|---|---|---|
+| **PhaseSumNet3** | additive phases | periodic (cos/sin) | works (d=1 sufficient) |
+| **RealAddNet** | additive embeddings | linear | **theorem: cannot solve, anywhere** |
+| **GatedComplexRNN3** | multiplicative rotation | linear over (Re,Im) | works |
+| **GRUBaseline3** | gated non-linear | linear over state | works (but not necessarily cleanly) |
+
+### The negative theorem for RealAddNet
+
+Logits are `W·(Σ_t e(x_t)) + b = W·e(atom) + k·W·e(TWIRL) + b` —
+**linear in k**. Three linear functions of k can change ranking at most
+two times (where slope orderings cross), so `argmax_c logit_c(k)` is
+piecewise constant with at most 3 pieces. The correct
+`(atom_class + k) mod 3` cycles 3 times every 3 steps. The architecture
+cannot fit even depth ∈ {0,1,2,3} simultaneously across atom classes,
+let alone generalize. Loss should remain at ln(3).
+
+### Result (CPU pilot, seed 0)
+
+| | params | ID acc | OOD acc (6–12) | mod-3 closure |
+|---|---:|---:|---:|---:|
+| PhaseSumNet3 | 355 | 0.999 | **0.999** | 25% of dims clean |
+| **RealAddNet** | 611 | **0.32** | **0.32** | — (loss = ln(3) = chance) |
+| GatedComplexRNN3 | 3,411 | 1.000 | **1.000** | **1.000** |
+| GRUBaseline3 | 3,213 | 1.000 | **0.937** | 0.70 |
+
+**Three takeaways:**
+
+1. **The negative theorem is sharper than predicted.** RealAddNet
+   doesn't just fail OOD — it fails *everywhere*, including the
+   training set, because mod-3 cannot be represented at all by an
+   architecture whose logits are linear in token count.
+
+2. **GRU is now visibly behind complex.** In Exp 2 (Z/2), gated real
+   and complex were tied at ~100% OOD. In Exp 3 (Z/3), complex
+   architectures hit 100% with full closure under 3·TWIRL, while the
+   GRU hits 94% with only 70% closure. The gating mechanism finds *a*
+   solution that fits the training distribution but doesn't perfectly
+   internalize the cyclic group structure. **This is the first
+   evidence in the project that complex specifically helps over real
+   when the algebra is non-binary.**
+
+3. **PhaseSumNet at 355 parameters fully solves a task that
+   architecture of any size with the wrong inductive bias provably
+   cannot.** The contrast between PhaseSumNet (355 p, 99.9% OOD) and
+   RealAddNet (611 p, chance) is the cleanest possible isolation of
+   "architectural prior matters more than parameter count".
+
+The full H100 run (5 seeds, depths to 20) is `python3 run_triple.py
+--config full`.
+
+---
+
+## How the three experiments fit together
+
+| | Exp 1 (additive attn) | Exp 2 (multiplicative, Z/2) | Exp 3 (multiplicative, Z/3) |
+|---|---|---|---|
+| Architecture | Transformer | PhaseSum / GatedCplx / GRU | + RealAddNet control |
+| Algebra | Z/2 | Z/2 | **Z/3** |
+| OOD generalization | ❌ chance | ✅ near-perfect | varies by arch |
+| Complex helps? | No | No — tied with real GRU | **Yes — complex strictly ahead** |
+| Pure-additive baseline | (transformer) failed | n/a | **provably cannot fit even ID** |
+
+### The combined story
+
+> *The inductive bias that matters for parity-like tasks is **the ability
+> to represent the symmetry group of the task**. For Z/2 you can do this
+> with real sign products or complex phase flips equally well, and that
+> is why Experiment 2's GRU tied with the complex architectures. For
+> Z/3 you need either continuous rotation (complex / 2D real rotation)
+> or gating non-linear in token count. Complex unit-circle phases give
+> you this in **one dimension**; gated real recurrence gives you a
+> messier approximation. **Purely additive real-valued networks with
+> linear readouts are formally barred** — they cannot represent
+> non-binary cyclic groups at all, anywhere. And softmax-attention
+> transformers (Experiment 1) sit in this provably-broken family for
+> exactly this reason: softmax weights summing to 1 forces additive
+> composition.*
+
+The honest version of the original question — "do complex numbers help
+in ML?" — is now answerable. They are not a universal upgrade. They
+are the *minimal* embedding for tasks whose symmetry group is the unit
+circle or a subgroup of it (rotations, phases, periodic structure).
+When such structure is genuinely present in the task, complex
+networks express it in fewer parameters than real ones, and the
+generalization difference shows up as you move from binary to richer
+groups.
 
 ---
 
@@ -184,12 +290,14 @@ cd ComplexAttn
 pip install -r requirements.txt
 
 # Sanity checks (~1 minute each, CPU is fine)
-python3 run.py     --config smoke
-python3 run_rnn.py --config smoke
+python3 run.py        --config smoke
+python3 run_rnn.py    --config smoke
+python3 run_triple.py --config smoke
 
 # Full experiments (H100 recommended)
-python3 run.py     --config full     # Experiment 1: transformer, ~30 min
-python3 run_rnn.py --config full     # Experiment 2: recurrent, ~30 min
+python3 run.py        --config full     # Exp 1: transformer (Z/2),  ~30 min
+python3 run_rnn.py    --config full     # Exp 2: RNN (Z/2),          ~20 min
+python3 run_triple.py --config full     # Exp 3: RNN (Z/3),          ~25 min
 ```
 
 Override device or output directory if needed:
@@ -209,28 +317,34 @@ freely.
 ComplexAttn/
 ├── README.md          this file
 ├── requirements.txt   torch, numpy, matplotlib, tqdm
-├── data.py            synthetic data generator and vocabulary
 
-├── models.py          Experiment 1: real & complex transformer encoders
-├── analyze.py         Experiment 1: behavioral phase probe (paired sentences)
-├── run.py             Experiment 1 orchestrator
+├── data.py            Exp 1+2 data (Z/2 parity-of-negation)
+├── data_triple.py     Exp 3   data (Z/3 rotation task)
 
-├── rnn_models.py      Experiment 2: PhaseSumNet, GatedComplexRNN, GRUBaseline
-├── analyze_rnn.py     Experiment 2: direct read-off of learned phases
-├── run_rnn.py         Experiment 2 orchestrator
+├── models.py          Exp 1: real & complex transformer encoders
+├── analyze.py         Exp 1: behavioral phase probe (paired sentences)
+├── run.py             Exp 1: orchestrator
+├── train.py           Exp 1+2: binary training loop
 
-└── train.py           shared training loop with per-depth stratified eval
+├── rnn_models.py      Exp 2: PhaseSumNet, GatedComplexRNN, GRUBaseline
+├── analyze_rnn.py     Exp 2: direct read-off of learned phases
+├── run_rnn.py         Exp 2: orchestrator
+
+├── models_triple.py   Exp 3: PhaseSumNet3, RealAddNet, GatedComplexRNN3, GRUBaseline3
+├── analyze_triple.py  Exp 3: probes (mod-3 closure + slope analysis for negative control)
+├── train_triple.py    Exp 3: 3-class cross-entropy training loop
+└── run_triple.py      Exp 3: orchestrator
 ```
 
-After running, `results/` (Exp 1) and `results_exp2/` (Exp 2) contain:
+After running, `results/`, `results_exp2/`, `results_exp3/` each contain:
 
 ```
 results.json           all per-seed metrics, machine-readable
 summary.txt            headline numbers in plain text
-depth_accuracy.png     accuracy per depth, both models, ID and OOD
+depth_accuracy.png     accuracy per depth, all models
 training_curves.png    train loss + eval accuracy over training steps
-phase_probe.png        (Exp 1) Δ angle histogram
-phase_per_dim.png      (Exp 2) histogram of |learned NOT-phase| per dim
+phase_per_dim.png      probe histogram (Exp 2, 3)
+phase_probe.png        Δ angle histogram (Exp 1 only)
 ```
 
 ---
