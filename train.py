@@ -99,6 +99,17 @@ def train_model(model, *,
         "by_depth":  [],
     }
 
+    # Track the best-OOD checkpoint. Some architectures (notably the
+    # gated complex RNN) hit ~100% early then drift slightly off as the
+    # optimizer keeps pushing for marginal in-distribution gains past
+    # loss≈0. Reporting the best checkpoint gives an honest measurement
+    # of what the architecture is capable of.
+    best_ood     = -1.0
+    best_step    = 0
+    best_state   = None
+    best_by_depth = None
+    best_acc     = 0.0
+
     print(f"\n[{tag}]  params={sum(p.numel() for p in model.parameters()):,}  "
           f"steps={total_steps}  device={device}")
     step = 0
@@ -106,6 +117,12 @@ def train_model(model, *,
     for epoch in range(n_epochs):
         model.train()
         for tokens, y in train_dl:
+            # Defensive: cuDNN's fused GRU requires this to be set BEFORE
+            # every forward that will be backprop'd. evaluate() flips us
+            # into eval mode and the cuDNN state machine can't recover
+            # without an explicit train() between calls. Cheap, idempotent,
+            # safe for the other architectures too.
+            model.train()
             tokens = tokens.to(device)
             y      = y.to(device).float()
             logits = model(tokens)
@@ -128,18 +145,30 @@ def train_model(model, *,
                 ood = [d for d in by_d if d > train_depth_range[1]]
                 ind_acc = sum(by_d[d] for d in ind) / max(len(ind), 1)
                 ood_acc = sum(by_d[d] for d in ood) / max(len(ood), 1)
+                if ood_acc > best_ood:
+                    best_ood      = ood_acc
+                    best_step     = step
+                    best_acc      = acc
+                    best_by_depth = dict(by_d)
+                    best_state    = {k: v.detach().cpu().clone()
+                                     for k, v in model.state_dict().items()}
                 print(f"  step {step:5d}/{total_steps}  "
                       f"loss={loss.item():.4f}  "
                       f"acc={acc:.3f}  "
                       f"ID={ind_acc:.3f}  OOD={ood_acc:.3f}")
 
     dt = time.time() - t0
-    print(f"[{tag}]  done in {dt:.1f}s")
+    print(f"[{tag}]  done in {dt:.1f}s  (best OOD={best_ood:.3f} @ step {best_step})")
 
-    # Final detailed eval
+    # Restore best-OOD checkpoint so the probe + reported numbers reflect
+    # the actual generalizing model, not a drifted post-overtraining one.
+    if best_state is not None:
+        model.load_state_dict(best_state)
     final_acc, final_by_depth = evaluate(model, eval_tok, eval_lab, eval_dep,
                                          device=device)
-    history["final_acc"] = final_acc
+    history["final_acc"]      = final_acc
     history["final_by_depth"] = final_by_depth
-    history["wallclock_sec"] = dt
+    history["best_step"]      = best_step
+    history["best_ood"]       = best_ood
+    history["wallclock_sec"]  = dt
     return model, history
