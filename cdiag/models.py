@@ -95,6 +95,48 @@ def _diag_ssm_kernel_complex(lam, B, C, L):
     return kernel.real
 
 
+def _diag_ssm_kernel_real_rope(decay, theta, B1, B2, C1, C2, L):
+    """Real diagonal decay + per-mode rotation kernel.
+
+    This is the Mamba-3 RoPE-on-projections architecture written in
+    real arithmetic. Mathematically identical to the complex diagonal
+    SSM (Proposition 3 of Mamba-3) but with explicit real parameters.
+
+    Parameters
+    ----------
+    decay  : [n]            real, in (0, 1) or (-1, 1) depending on variant
+    theta  : [n]            rotation angle per mode (real)
+    B1, B2 : [n, d_in]      "real" and "imaginary" parts of the input projection
+    C1, C2 : [d_out, n]     "real" and "imaginary" parts of the output projection
+
+    Kernel
+    ------
+    k[o, i, t] = decay^t * sum_n [
+        C1[o,n] * (cos(t*theta_n) B1[n,i] - sin(t*theta_n) B2[n,i])
+      + C2[o,n] * (sin(t*theta_n) B1[n,i] + cos(t*theta_n) B2[n,i])
+    ]
+
+    which equals Re[(C1 + i C2)^T (B1 + i B2) * (decay * exp(i theta))^t].
+    """
+    t = torch.arange(L, device=decay.device, dtype=decay.dtype)
+    decay_pow = decay.unsqueeze(-1) ** t.unsqueeze(0)              # [n, L]
+    phase     = theta.unsqueeze(-1) * t.unsqueeze(0)               # [n, L]
+    cos_t     = torch.cos(phase)                                   # [n, L]
+    sin_t     = torch.sin(phase)                                   # [n, L]
+
+    # For each n,t, the contribution to kernel[o, i] is:
+    #   decay^t * Re[ (C1+iC2)^T (B1+iB2) e^{i t theta_n} ]
+    # = decay^t * [ (C1^T B1 - C2^T B2) cos(t theta_n)
+    #             - (C1^T B2 + C2^T B1) sin(t theta_n) ]
+    # so the bilinear coefficients are:
+    real_part = torch.einsum("on,ni->oni", C1, B1) - torch.einsum("on,ni->oni", C2, B2)
+    imag_part = -(torch.einsum("on,ni->oni", C1, B2) + torch.einsum("on,ni->oni", C2, B1))
+    # kernel[o, i, t] = sum_n decay^t * (cos_t real + sin_t imag)
+    kernel = (torch.einsum("oni,nt->oit", real_part, decay_pow * cos_t)
+              + torch.einsum("oni,nt->oit", imag_part, decay_pow * sin_t))
+    return kernel
+
+
 # ============================================================
 # Model wrappers
 # ============================================================
@@ -192,6 +234,80 @@ class ComplexDiagSSM(nn.Module):
         return sum((p ** 2).sum() for p in self.parameters()).sqrt()
 
 
+class RealRoPESSM(nn.Module):
+    """Real diagonal SSM with per-mode rotation on B and C (Mamba-3 style).
+
+    Mathematically equivalent to ComplexDiagSSM by Mamba-3 Proposition 3:
+    complex diagonal SSMs are equivalent to real positive-decay SSMs with
+    rotary embeddings on the input/output projections. We implement both
+    here explicitly with real arithmetic to ask: does the equivalent
+    real-arithmetic implementation share the empirical advantage of the
+    complex parameterization?
+
+    The kernel is:
+        k[o, i, t] = decay_n^t * Re[(C1+iC2)^T (B1+iB2) e^{i t theta_n}]
+
+    which equals ComplexDiagSSM's kernel when decay_n is the magnitude
+    and theta_n is the phase of the complex lambda.
+
+    If self.learn_theta is False, the rotation phases are FROZEN at their
+    initialization. This isolates the "function-class" contribution of
+    rotation (oscillatory expressivity at fixed but spread-out frequencies)
+    from the "optimization" contribution of being able to learn the right
+    phases.
+    """
+    def __init__(self, n_state: int, d_in: int, d_out: int,
+                  learn_theta: bool = True, allow_negative_decay: bool = False):
+        super().__init__()
+        self.n = n_state
+        self.allow_negative_decay = allow_negative_decay
+        # Decay: same parameterization as ComplexDiagSSM's magnitude.
+        # |lambda| = exp(-softplus(raw_log_mag)) in (0, 1).
+        self.raw_log_mag = nn.Parameter(
+            torch.full((n_state,), -3.0) + 0.1 * torch.randn(n_state))
+        if allow_negative_decay:
+            # An extra sign factor: lambda_n = sign * exp(-softplus(raw_log_mag))
+            # Parameterize sign through tanh -> (-1, 1).
+            self.raw_sign = nn.Parameter(torch.randn(n_state) * 0.1)
+        # Phases as in ComplexDiagSSM: linspace(0, pi).
+        phase_init = (torch.linspace(0, torch.pi, n_state + 1)[1:].clone()
+                       + 0.01 * torch.randn(n_state))
+        if learn_theta:
+            self.theta = nn.Parameter(phase_init)
+        else:
+            # Frozen rotation phases: register as buffer
+            self.register_buffer("theta", phase_init)
+        # Two real projection components for each of B and C
+        self.B1 = nn.Parameter(torch.randn(n_state, d_in) / (d_in ** 0.5))
+        self.B2 = nn.Parameter(torch.randn(n_state, d_in) / (d_in ** 0.5))
+        self.C1 = nn.Parameter(torch.randn(d_out, n_state) / (n_state ** 0.5))
+        self.C2 = nn.Parameter(torch.randn(d_out, n_state) / (n_state ** 0.5))
+
+    @property
+    def decay(self):
+        mag = torch.exp(-torch.nn.functional.softplus(self.raw_log_mag))
+        if self.allow_negative_decay:
+            return torch.tanh(self.raw_sign) * mag
+        return mag
+
+    @property
+    def lam(self):
+        # Provide a "lambda" property for compatibility with diagnostic code
+        # that reads model.lam.abs() etc.
+        return torch.complex(self.decay * torch.cos(self.theta),
+                              self.decay * torch.sin(self.theta))
+
+    def forward(self, x):
+        B_dim, L, d_in = x.shape
+        kernel = _diag_ssm_kernel_real_rope(
+            self.decay, self.theta, self.B1, self.B2, self.C1, self.C2, L)
+        return _causal_conv(x, kernel)
+
+    def param_l2_norm(self):
+        return sum((p ** 2).sum() for p in self.parameters()
+                    if p.requires_grad).sqrt()
+
+
 # ============================================================
 # Causal convolution via FFT
 # ============================================================
@@ -235,21 +351,48 @@ if __name__ == "__main__":
     assert y_c.shape == (3, 16, 2)
     print(f"ComplexDiagSSM:{sum(p.numel() for p in m_c.parameters())} params, output {y_c.shape}")
 
+    # RoPE-style real SSM
+    m_rope = RealRoPESSM(n_state=8, d_in=2, d_out=2)
+    y_rope = m_rope(x)
+    assert y_rope.shape == (3, 16, 2)
+    print(f"RealRoPESSM:   {sum(p.numel() for p in m_rope.parameters() if p.requires_grad)} params, output {y_rope.shape}")
+
+    m_rope_frozen = RealRoPESSM(n_state=8, d_in=2, d_out=2, learn_theta=False)
+    y_rope_frozen = m_rope_frozen(x)
+    print(f"RealRoPESSM (frozen theta): "
+          f"{sum(p.numel() for p in m_rope_frozen.parameters() if p.requires_grad)} params (no theta)")
+
     # Verify backward pass works
     loss = (y_c ** 2).sum()
     loss.backward()
     print(f"ComplexDiagSSM backward OK, raw_log_mag grad norm: {m_c.raw_log_mag.grad.norm():.4f}")
 
-    # Reproducibility check: a complex SSM with phases all = 0 should
-    # behave like a real SSM with the same magnitudes
+    # Reproducibility check 1: complex with phase=0 should match real with same magnitudes
     torch.manual_seed(1)
     m_c2 = ComplexDiagSSM(n_state=4, d_in=1, d_out=1)
     with torch.no_grad():
         m_c2.raw_phase.zero_()    # phases = 0 -> all lambdas real positive
         m_c2.B_im.zero_()
         m_c2.C_im.zero_()
-    x2 = torch.randn(1, 20, 1)
     k_re_via_complex = _diag_ssm_kernel_complex(m_c2.lam, m_c2.B, m_c2.C, 20)
     k_re_native      = _diag_ssm_kernel_real(m_c2.lam.real, m_c2.B.real, m_c2.C.real, 20)
     diff = (k_re_via_complex - k_re_native).abs().max()
-    print(f"Sanity check: complex w/ phase=0 vs real kernel max diff = {diff:.2e}")
+    print(f"Sanity 1: complex w/ phase=0 vs real kernel max diff = {diff:.2e}")
+
+    # Reproducibility check 2: ComplexDiagSSM and RealRoPESSM with matched
+    # parameters should produce identical kernels (Mamba-3 Prop 3)
+    torch.manual_seed(2)
+    m_c3   = ComplexDiagSSM(n_state=4, d_in=2, d_out=2)
+    m_rope3 = RealRoPESSM(n_state=4, d_in=2, d_out=2)
+    # Copy the complex SSM's parameters into the RoPE SSM
+    with torch.no_grad():
+        m_rope3.raw_log_mag.copy_(m_c3.raw_log_mag)
+        m_rope3.theta.copy_(m_c3.raw_phase)
+        m_rope3.B1.copy_(m_c3.B_re); m_rope3.B2.copy_(m_c3.B_im)
+        m_rope3.C1.copy_(m_c3.C_re); m_rope3.C2.copy_(m_c3.C_im)
+    k_c     = _diag_ssm_kernel_complex(m_c3.lam, m_c3.B, m_c3.C, 20)
+    k_rope  = _diag_ssm_kernel_real_rope(m_rope3.decay, m_rope3.theta,
+                                          m_rope3.B1, m_rope3.B2,
+                                          m_rope3.C1, m_rope3.C2, 20)
+    diff = (k_c - k_rope).abs().max()
+    print(f"Sanity 2: complex vs RealRoPE kernel max diff = {diff:.2e}")

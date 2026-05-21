@@ -35,7 +35,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from models import RealDiagSSM, ComplexDiagSSM
+from models import RealDiagSSM, ComplexDiagSSM, RealRoPESSM
 from data import make_batch
 
 
@@ -118,6 +118,13 @@ def make_model(kind: str, n_state: int, d_in: int, d_out: int):
         return RealDiagSSM(n_state, d_in, d_out)
     elif kind == "complex":
         return ComplexDiagSSM(n_state, d_in, d_out)
+    elif kind == "real_rope":
+        return RealRoPESSM(n_state, d_in, d_out, learn_theta=True)
+    elif kind == "real_rope_frozen":
+        return RealRoPESSM(n_state, d_in, d_out, learn_theta=False)
+    elif kind == "real_rope_neg":
+        return RealRoPESSM(n_state, d_in, d_out, learn_theta=True,
+                            allow_negative_decay=True)
     raise ValueError(kind)
 
 
@@ -196,7 +203,8 @@ def plot_param_dynamics(rows, outpath):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="full",
-                    choices=("smoke", "matched_n", "full", "L_sweep"))
+                    choices=("smoke", "matched_n", "full", "L_sweep",
+                              "rope_test"))
     ap.add_argument("--outdir", default="results_cdiag")
     ap.add_argument("--device", default=None)
     ap.add_argument("--seeds", type=int, default=3)
@@ -241,6 +249,26 @@ def main():
         configs  = [("complex", 16)]
         # Real sized aggressively: up to 32x the complex model.
         configs += [("real", n) for n in [16, 32, 64, 128, 256, 512]]
+        seeds = list(range(args.seeds))
+        steps = args.steps
+    elif args.config == "rope_test":
+        # Test (A) from the project notes: does Mamba-3-style RoPE on
+        # real-decay SSM rescue accuracy and break kernel collapse?
+        # Compare:
+        #   real            -- the failing baseline
+        #   complex         -- the succeeding baseline
+        #   real_rope       -- Mamba-3 architecture in our minimal setting
+        #                      (mathematically equivalent to complex by Prop 3)
+        #   real_rope_frozen-- RoPE with frozen random rotation phases
+        #                      (tests function-class contribution alone)
+        configs = [
+            ("real",              16),
+            ("real",              128),
+            ("complex",           16),
+            ("real_rope",         16),
+            ("real_rope_frozen",  16),
+            ("real_rope_neg",     16),
+        ]
         seeds = list(range(args.seeds))
         steps = args.steps
 

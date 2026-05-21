@@ -8,8 +8,9 @@ import sys, os
 sys.path.insert(0, "/home/claude/phase_negation/cdiag")
 import numpy as np
 import torch
-from models import (RealDiagSSM, ComplexDiagSSM,
-                    _diag_ssm_kernel_real, _diag_ssm_kernel_complex)
+from models import (RealDiagSSM, ComplexDiagSSM, RealRoPESSM,
+                    _diag_ssm_kernel_real, _diag_ssm_kernel_complex,
+                    _diag_ssm_kernel_real_rope)
 from run import train
 
 
@@ -17,6 +18,10 @@ def get_kernel(model, L):
     with torch.no_grad():
         if isinstance(model, RealDiagSSM):
             return _diag_ssm_kernel_real(model.lam, model.B, model.C, L).cpu().numpy()
+        if isinstance(model, RealRoPESSM):
+            return _diag_ssm_kernel_real_rope(
+                model.decay, model.theta,
+                model.B1, model.B2, model.C1, model.C2, L).cpu().numpy()
         return _diag_ssm_kernel_complex(model.lam, model.B, model.C, L).cpu().numpy()
 
 
@@ -26,17 +31,30 @@ T = 2 * K + L + 1
 steps = 1500 if device == "cpu" else 3000
 
 results = {}
-for kind, n in [("complex", 16), ("real", 128)]:
+configs = [
+    ("complex",          16),
+    ("real",             128),
+    ("real_rope",        16),
+    ("real_rope_frozen", 16),
+    ("real_rope_neg",    16),
+]
+for kind, n in configs:
     torch.manual_seed(0); np.random.seed(0)
     if kind == "real":
         m = RealDiagSSM(n, A+2, A+1).to(device)
-    else:
+    elif kind == "complex":
         m = ComplexDiagSSM(n, A+2, A+1).to(device)
+    elif kind == "real_rope":
+        m = RealRoPESSM(n, A+2, A+1, learn_theta=True).to(device)
+    elif kind == "real_rope_frozen":
+        m = RealRoPESSM(n, A+2, A+1, learn_theta=False).to(device)
+    elif kind == "real_rope_neg":
+        m = RealRoPESSM(n, A+2, A+1, learn_theta=True,
+                         allow_negative_decay=True).to(device)
     train(m, K, L, A, lr=5e-3, steps=steps, batch_size=64,
           device=device, log_every=steps, val_every=steps, tag=f"{kind}-n{n}")
     k = get_kernel(m, T)
-    # Diagonal kernels for data classes 1..8
-    diag = np.stack([k[i, i, :] for i in range(1, A+1)], axis=0)  # [8, T]
+    diag = np.stack([k[i, i, :] for i in range(1, A+1)], axis=0)
     results[f"{kind}-n{n}"] = diag
 
 print("\n=== Correlation matrix between diagonal kernels k[i,i,:] for i=1..8 ===")
