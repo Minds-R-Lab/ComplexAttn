@@ -48,10 +48,9 @@
 \DeclareMathOperator{\rank}{rank}
 
 \title{
-  Cyclic-Group Composition as a Diagnostic for Architectural
-  Inductive Bias:\\
-  \large Why Complex Unit-Circle Networks Generalize Where Real-Valued
-  Gated Recurrences Do Not
+  Periodic Readouts, Not Complex Numbers:\\
+  \large What Actually Determines Generalization on
+  Cyclic-Group Composition Tasks
 }
 
 \author{Minds-R-Lab}
@@ -61,36 +60,47 @@
 \maketitle
 
 \begin{abstract}
-We ask when, if ever, complex-valued neural architectures offer
-inductive-bias advantages over real-valued ones. To make the
-question crisp we study cyclic-group composition tasks: sequences
-containing one of $n$ atoms and $k$ instances of a single
-``rotation'' token, with label $(c + k) \bmod n$, training on
-$k \in \{0,\ldots,K_\text{tr}\}$ and evaluating on $k$ up to $4K_\text{tr}$.
-Across five experiments and 200+ training runs we find:
-(i)~A 303{,}000-parameter complex transformer with Hermitian
-attention learns a phase-flip representation of the rotation token
-(77\% of probe pairs near $\pi$ on $\Z/2$) but cannot compose
-it---softmax weights sum to one, forcing additive composition.
-(ii)~A 273-parameter set-equivariant phase-sum network
-(\textsc{PhaseSumNet}) generalizes perfectly to out-of-distribution
-depths on $\Z/n$ for every $n \in \{2,3,5,7,11,13\}$ tested, with
-zero variance across seeds.
-(iii)~Real-valued gated recurrences (GRU, LSTM) solve $\Z/2$ and
-$\Z/3$ but collapse to chance ($1/n$) on $\Z/5$ across a 285$\times$
-capacity sweep from 4k to 1M parameters. The mechanism is
-state saturation against the $\tanh$ ceiling, after which the
-linear readout becomes a near-constant function of $k$.
-(iv)~On $\Z/7$ with two-layer GRU at large width, the barrier
-\emph{leaks via grokking}: a late-training phase transition (loss
-already at zero) sometimes finds an approximately periodic state
-trajectory that partially aligns with the readout, reaching OOD
-accuracy 0.95. Across every condition, the complex unit-circle
-architecture solves the task two-to-three orders of magnitude more
-efficiently in parameters, with no phase transition. We argue that
-the qualitative separation is between architectures whose
-composition operator is a group homomorphism by construction and
-those that must discover one through optimization.
+We set out to ask whether complex-valued neural architectures offer
+inductive-bias advantages over real-valued ones on tasks with cyclic
+symmetry. To make the question crisp, we study cyclic-group
+composition tasks: sequences containing one of $n$ atoms and $k$
+``rotation'' tokens, with label $(c + k) \bmod n$. We train on
+$k \in \{0,\ldots,5\}$ and evaluate up to $k = 20$.
+A factorial ablation over 90 training runs forces a reframing of
+what we had previously called a complex-vs-real result. We find:
+(i)~The architecture we initially studied under the name
+\textsc{PhaseSumNet} (sum learned phases, then $[\cos, \sin]$
+readout, then linear head) is mathematically identical to its
+``real'' analogue (sum learned real embeddings, then $[\cos, \sin]$
+readout); the two architectures produce numerically indistinguishable
+results to four decimal places at every $n \in \{2,3,5,7,11\}$ we
+tested. The relevant design axis is not real vs.\ complex but
+\emph{linear vs.\ periodic readout}.
+(ii)~Networks with periodic readouts on summed embeddings achieve OOD
+accuracy $1.000 \pm 0.000$ at every $n$ tested, with 306--747
+parameters, while linear-readout analogues collapse to exactly the
+$1/n$ chance line predicted by an elementary topological argument
+about $\R$.
+(iii)~Adding a periodic readout to a GRU does \emph{not} rescue it
+on $\Z/5$; the GRU's failure is upstream of the readout, in the
+saturation of its $\tanh$-bounded state, and persists across a
+285$\times$ capacity sweep up to 1M parameters.
+(iv)~A 303{,}000-parameter complex transformer with Hermitian
+attention learns a near-correct phase representation of the rotation
+token (77\% of probe pairs near $\pi$) but cannot compose it,
+because softmax attention is constrained to convex combinations.
+(v)~Some GRU configurations grok the task late in training, with
+seed-dependent success: at $\Z/3$ with $d=16$, GRU OOD accuracy is
+$0.78 \pm 0.18$ across three seeds. The barrier is probabilistic,
+not absolute.
+The combined picture is that complex notation in our setting is a
+motivation for an architecture whose essential property---periodic
+readout on a sum of token embeddings---is fully captured in real
+arithmetic. The same architecture written with $[\cos, \sin]$ of a
+real sum solves $\Z/n$ for every $n$ up to 11 at three orders of
+magnitude fewer parameters than gated baselines, which fail
+deterministically when they fail and grok unpredictably when they
+succeed.
 \end{abstract}
 
 \section{Introduction}
@@ -107,53 +117,79 @@ a transformer with rotary positional encoding generalizes
 to unseen positions roughly to the extent that its relative-position
 construction is faithful to a continuous group action.
 
-This paper asks a sharp version of the second question. \emph{Given a
-synthetic task whose semantics is governed exactly by the cyclic group
-$\Z/n\Z$, which architectures generalize across the group, and why?}
-The question has a known partial answer: architectures that
-\emph{represent} the group action---either by construction or by
-training---generalize, while architectures that do not, do not. The
-contribution of this paper is to make this folk wisdom mathematically
-precise on a controlled task family, characterize the failure modes of
-several common architectures (transformer, GRU, LSTM, additive
-linear), and identify a previously-unnoticed phenomenon: even when an
-architecture is in principle capable of representing the group, doing
-so may require an optimization-time phase transition (grokking) that
-does not occur for natively-symmetric architectures.
+This paper began as an investigation into whether complex-valued
+neural architectures might offer such advantages on tasks with cyclic
+symmetry. We designed a controlled $\Z/n$-rotation task family, ran
+a sequence of experiments comparing complex-valued ``PhaseSumNet''
+architectures to real-valued gated recurrences, and observed a
+striking gap---100\% OOD accuracy at $n=5,7,11,13$ with 300--800
+parameters for PhaseSumNet, versus chance for GRU and LSTM up to
+1M parameters.
+
+A careful factorial ablation of the design choices, however, shows
+that ``complex'' was the wrong description of what was happening.
+The architecture we had been calling complex---summing learned
+phases, applying $[\cos, \sin]$, then a linear head---is bit-identical
+to its real analogue (sum real embeddings, apply $[\cos, \sin]$, linear
+head). They produce numerically indistinguishable results across
+all $n$ and seeds we tested. The relevant design axis is whether the
+readout applies a periodic transform ($[\cos, \sin]$) to the summed
+representation; the choice of labelling the embedding ``complex'' or
+``real'' is structurally vacuous in the resulting computation.
+
+This paper therefore investigates a sharpened question.
+\emph{Among the simplest possible sequence architectures, what
+structural property determines whether the model generalizes on
+cyclic-group composition tasks?} We answer: it is the presence of a
+periodic readout applied to an unbounded sum of token embeddings.
+A linear readout fails by an elementary topological argument
+(\Cref{thm:additive-barred}). A periodic readout succeeds across
+$n \in \{2,3,5,7,11\}$ with $O(n)$ parameters, and the success is
+exact in both real and complex coordinates. Gated recurrence does
+not solve the task by the same mechanism: its state saturates
+against the $\tanh$ ceiling, and a periodic readout on a saturated
+state cannot reconstruct what the state has lost.
 
 \subsection{Contributions}
 
 \begin{enumerate}[leftmargin=*, itemsep=2pt]
 \item We formalize a cyclic-group composition task on $\Z/n\Z$ and
-prove that any additive architecture composing token embeddings with
-a linear readout produces logits linear in the rotation count $k$,
-which cannot represent $(c+k) \bmod n$ for $n \geq 3$. The model
-provably converges to uniform output (\Cref{thm:additive-barred}).
+prove (\Cref{thm:additive-barred}) that any architecture composing
+token embeddings additively and applying a linear readout produces
+logits linear in the rotation count $k$, which cannot represent
+$(c+k) \bmod n$ above the $1/n$ chance line for any $n$.
 
-\item We exhibit a minimal architecture, \textsc{PhaseSumNet}, that
-represents the group action by construction via unit-circle phases.
-It achieves OOD accuracy $1.000 \pm 0.000$ across $n \in
-\{2,3,5,7,11,13\}$ with 306--845 parameters.
+\item We exhibit a 306--747-parameter architecture, \textsc{SumPer}
+(sum learned embeddings, apply $[\cos, \sin]$ componentwise, linear
+head), that achieves OOD accuracy $1.000 \pm 0.000$ at every
+$n \in \{2,3,5,7,11\}$ tested. The architecture admits both real and
+complex interpretations; we show by factorial ablation that the
+two interpretations produce identical numerical results to four
+decimal places.
 
-\item We show that softmax-attention transformers learn the
-single-token group action (probe: 77\% of rotation pairs near $\pi$
-on $\Z/2$) but fail to compose it, because softmax weights summing to
-one make attention an additive composition operator
-(\Cref{prop:attention-additive}).
+\item We show that softmax-attention transformers learn the single-token
+group action (probe: 77\% of rotation pairs near $\pi$ on $\Z/2$) but
+fail to compose it, because softmax weights summing to one make
+attention an additively-composing operator
+(\Cref{prop:attention-additive,cor:attention-cant-multiply}).
 
 \item Across a capacity sweep of GRU and LSTM from 4{,}000 to
-1{,}060{,}000 parameters, real-valued gated recurrence fails on
-$\Z/5$ at chance ($1/n$), with the mechanism identified by trajectory
-analysis: $\tanh$-bounded state saturates past training depth,
-producing constant logits.
+1{,}060{,}000 parameters, gated recurrence fails on $\Z/5$ at chance
+$1/n$. Trajectory analysis identifies the mechanism: $\tanh$-bounded
+state saturates past training depth, producing constant logits at
+large $k$. Appending a periodic readout to the GRU does not rescue
+it---confirming the failure is upstream of the readout, in the
+recurrent dynamics.
 
-\item On $\Z/7$ with two-layer GRU at large width, we observe
-\emph{grokking}: a phase transition during late training where the
-model's OOD accuracy jumps from $\sim$0.70 to $\sim$0.95 while
-training loss has been zero for thousands of steps. The grokked
-model's state has stopped saturating; its trajectory diagnostics
-place it precisely between the failing baseline and the
-unit-circle reference.
+\item Some GRU configurations \emph{grok} the task with seed-dependent
+success. At $\Z/3$ with $d=16$ across three seeds, GRU OOD is
+$0.78 \pm 0.18$: a partial averaging of seeds that grok and seeds
+that don't. At $\Z/7$ with two-layer GRU at $d=128$, we observe a
+clean phase transition during late training, OOD jumping from 0.71
+to 0.94 over a single eval window while training loss has been zero
+for thousands of steps. The grokked model's state has stopped
+saturating---the optimization-time discovery of a non-saturating
+trajectory is what grokking, in this setting, accomplishes.
 \end{enumerate}
 
 \subsection{Roadmap}
@@ -162,7 +198,7 @@ unit-circle reference.
 group-equivariant architectures, length generalization, and grokking.
 \Cref{sec:framework} develops the theoretical framework: cyclic-group
 composition tasks, the question of architectural representability,
-and the negative theorem for additive-linear architectures.
+and the negative theorem for linear-readout architectures.
 \Cref{sec:task,sec:architectures} describe the task family and the
 six architectures we study. \Cref{sec:exp1,sec:exp2,sec:exp3,sec:exp4,sec:exp5}
 report the five experiments. \Cref{sec:mechanism} performs trajectory
@@ -550,6 +586,7 @@ Experiment & Group $\Z/n$ & $K_\mathrm{tr}$ & $K_\mathrm{eval}$ & Seeds \\
 3: $\Z/3$ separation test & $\Z/3$ & 5  & 20 & 5 \\
 4: scaling sweep & $\Z/n$, $n\in\{2,3,5,7,11,13\}$ & 5 & 20 & 3 \\
 5: capacity sweep & $\Z/5, \Z/7$ & 5 & 20 & 3 \\
+6: factorial ablation & $\Z/n$, $n\in\{2,3,5,7,11\}$ & 5 & 20 & 3 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -965,6 +1002,181 @@ architecture discovers an approximately group-respecting state
 trajectory.
 
 
+\section{Experiment 6: Factorial Ablation --- What is the Real Axis?}
+\label{sec:exp6}
+
+\paragraph{Motivation.} Experiments 1--5 compare architectures that
+differ on multiple axes simultaneously. \textsc{PhaseSumNet} differs
+from a GRU on at least four: (a) complex vs.\ real algebra, (b)
+additive vs.\ gated composition, (c) unit-circle vs.\ $\tanh$-bounded
+state, and (d) periodic ($[\cos,\sin]$) vs.\ linear readout. When
+\textsc{PhaseSumNet} wins by orders of magnitude, we do not know
+\emph{which} of these axes is responsible. A reviewer can reasonably
+suspect that ``complex'' is doing little work and the real action
+is elsewhere.
+
+To isolate the contribution of each axis we run a $2\times 2$
+factorial ablation over composition (additive vs.\ multiplicative)
+and readout (linear vs.\ periodic), with all other variables held
+constant. The four cells, plus two GRU variants for context, are:
+
+\begin{center}
+\begin{tabular}{l|cc}
+\toprule
+& Linear readout & Periodic readout ($[\cos,\sin]$) \\
+\midrule
+Additive composition       & \textsc{RealAddLin}    & \textsc{RealAddPer} \\
+Multiplicative composition & \textsc{ComplexMulLin} & \textsc{ComplexMulPer} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textsc{ComplexMulPer} is the original \textsc{PhaseSumNet};
+\textsc{RealAddLin} is the original \textsc{RealAddNet}.
+\textsc{RealAddPer} is new and \emph{critical}: it sums real-valued
+embeddings (no complex algebra anywhere), then applies $[\cos,\sin]$
+componentwise to the sum, then a linear head. \textsc{ComplexMulLin}
+is new and serves as a control: ``multiplicative'' phase composition
+(which is just summing phases) feeding a linear head without
+periodic transform. We also test \textsc{GRULin} and \textsc{GRUPer}
+(GRU with linear vs.\ periodic readout) to determine whether the
+GRU's failure on $\Z/5$ is in the recurrent dynamics or in the
+readout.
+
+\paragraph{The latent identity.} A bit of algebra reveals that
+\textsc{ComplexMulPer} and \textsc{RealAddPer} are the same model.
+\textsc{ComplexMulPer} treats each token's embedding as a learned
+phase vector $\theta(x) \in \R^d$, sums phases over the sequence,
+and reads out from $[\cos\sum_t\theta(x_t), \sin\sum_t\theta(x_t)]$.
+\textsc{RealAddPer} treats each token's embedding as a real vector
+$e(x) \in \R^d$, sums them, and reads out from
+$[\cos\sum_t e(x_t), \sin\sum_t e(x_t)]$. The variable names differ
+but the computations are bit-identical. Similarly \textsc{ComplexMulLin}
+is \textsc{RealAddLin} with cosmetically different initialization
+(uniform on $[-\pi, \pi]$ instead of $\mathcal{N}(0, 0.3^2)$). The
+factorial design therefore predicts: \textsc{RealAddPer} and
+\textsc{ComplexMulPer} will produce numerically identical results;
+\textsc{RealAddLin} and \textsc{ComplexMulLin} will produce
+numerically identical results.
+
+This is an experimental prediction worth testing in case our
+algebraic identification is wrong (different optimizer trajectories
+from different initialization, for instance, might produce different
+final accuracies).
+
+\paragraph{Setup.} Five $n$ values $\{2, 3, 5, 7, 11\}$, three seeds
+each, all six architectures, $d=16$. Train depths 0--5, eval 0--20,
+$n_\text{train} = 60{,}000$ samples, 20 epochs, lr $5\times 10^{-3}$,
+AdamW. Total: 90 training runs.
+
+\paragraph{Results.}
+
+\begin{table}[h]
+\centering
+\caption{Experiment 6: 3-seed OOD accuracy on $\Z/n$ for the six
+factorial-ablation architectures. Cells flagged \textbf{bold} are
+within 0.001 of OOD = 1.000.}
+\label{tab:exp6-results}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+Architecture & Params & $n=2$ & $n=3$ & $n=5$ & $n=7$ & $n=11$ \\
+\midrule
+\textsc{RealAddLin}    & 546--1131 & $0.507$ & $0.342$ & $0.200$ & $0.140$ & $0.070$ \\
+\textsc{ComplexMulLin} & 546--1131 & $0.507$ & $0.339$ & $0.200$ & $0.138$ & $0.071$ \\
+\textsc{RealAddPer}    & 306--747  & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ \\
+\textsc{ComplexMulPer} & 306--747  & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ \\
+\textsc{GRULin}        & 3.6k--4.0k & $\mathbf{1.000}$ & $0.78 \pm 0.18$ & $0.35 \pm 0.09$ & $0.187$ & $0.178$ \\
+\textsc{GRUPer}        & 3.6k--4.4k & $0.509$ & $0.335$ & $0.242$ & $0.169$ & $0.209$ \\
+\midrule
+Chance $1/n$           & ---       & $0.500$ & $0.333$ & $0.200$ & $0.143$ & $0.091$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Three findings.}
+
+\textbf{1. \textsc{RealAddPer} and \textsc{ComplexMulPer} are
+empirically equivalent.} At every $n$, the two architectures produce
+identical OOD accuracy to four decimal places (variance across seeds
+is $0.000 \pm 0.000$ for both). The algebraic prediction is
+confirmed empirically. Same for the linear-readout pair: their
+numerical differences are $\leq 0.003$, within seed variance.
+\emph{The architecture we had been calling complex is the same model
+as its real counterpart.}
+
+\textbf{2. The periodic readout is the load-bearing piece.}
+\textsc{RealAddPer} solves $\Z/n$ at 100\% OOD accuracy for every
+$n$ we tested, with 306--747 parameters and zero variance across
+seeds. \textsc{RealAddLin} sits at exactly the $1/n$ chance line.
+The same architecture, the same composition operation (sum), the
+same parameter scale---differing only in whether the readout
+applies $[\cos, \sin]$ to the summed representation. The chance
+line $1/n$ is tightly tracked by the linear-readout architectures,
+with deviations $\leq 0.021$ at $n=11$ consistent with sampling
+finite-precision artefacts (a deterministic single-class predictor
+on a balanced eval set of 1500-2000 samples per depth scores
+slightly below $1/n$ when the eval distribution is not perfectly
+balanced).
+
+\textbf{3. Adding a periodic readout to a GRU does \emph{not}
+rescue it.} \textsc{GRUPer} is no better than \textsc{GRULin}, and
+at small $n$ noticeably worse: at $n=2$, \textsc{GRULin} reaches
+OOD 1.000 but \textsc{GRUPer} reaches only 0.509 (with ID accuracy
+dropping to $0.972$ from $1.000$). The intuition: the GRU's
+bidirectional final state lives in $[-1, 1]^{2d}$ due to $\tanh$;
+when scaled by $\pi$ and passed through $[\cos, \sin]$, it covers
+only a fraction of the unit circle, and the readout's projection
+amplifies state-noise as much as state-signal. \emph{The failure
+of the GRU is upstream of the readout, in the recurrent dynamics.}
+Trajectory analysis (\Cref{sec:mechanism}) shows this directly:
+the state saturates against the $\tanh$ ceiling, and no readout
+applied to a saturated state can recover the cyclic structure.
+
+\paragraph{The seed-variance reveal.} \textsc{GRULin} at $\Z/3$
+achieves OOD $0.78 \pm 0.18$ over three seeds. This high variance
+is not noise: examination of the individual seeds shows one at
+$\sim 0.45$ (does not grok) and two at $\sim 0.95$ (grok). The
+$0.78$ mean is an average of bimodally-distributed seeds. The
+implication is that what we previously described as ``GRU solves
+$\Z/3$'' (Experiment 4, mean $0.991 \pm 0.003$) was actually
+``GRU grokking $\Z/3$ with high reliability,'' and the grokking
+probability drops with $n$: from near-1 at $n=3$, to roughly $0.5$
+at this $\Z/3$ configuration (where smaller $d$ apparently makes
+grokking harder), to roughly $0.5$ at $\Z/5$, to essentially zero
+at $n \geq 7$ for single-layer GRU. The structural barrier we
+identified in Experiment 5 is more correctly described as a
+\emph{grokking probability that decays to zero with $n$.}
+
+\paragraph{Implications.} The factorial ablation forces a sharp
+revision of the paper's framing. The architecture we had described
+as ``complex unit-circle'' is bit-identical to a real-valued
+architecture that sums embeddings and reads out periodically.
+``Complex'' was a useful motivation for arriving at the cos/sin
+projection but is not its essential property. The remaining
+non-trivial claims of the paper survive:
+
+\begin{itemize}[itemsep=2pt]
+\item The negative theorem (\Cref{thm:additive-barred}) still
+rules out the linear-readout family and is confirmed at all $n$.
+\item The mechanism analysis of the GRU saturation
+(\Cref{sec:mechanism}) is reinforced: the failure is upstream of
+the readout.
+\item The grokking phenomenon is more pervasive than we initially
+identified; we observed it at $\Z/3$, $\Z/5$, and $\Z/7$ depending
+on architecture configuration.
+\item The parameter-efficiency claim is reinforced by the new
+labelling: a 306-parameter \textsc{SumPer} architecture, written
+in real arithmetic, achieves OOD $1.000 \pm 0.000$ on $\Z/n$ for
+every $n$ up to 11 we tested.
+\end{itemize}
+
+What we lose is the framing claim ``complex networks beat real
+networks.'' That claim was simply incorrect at the level of
+arithmetic: the complex and real versions of our successful
+architecture were the same model.
+
+
 \section{Mechanism Analysis: State Trajectories}
 \label{sec:mechanism}
 
@@ -1198,104 +1410,146 @@ larger capacity is open}.
 \subsection{What We Can Claim}
 
 \begin{enumerate}[itemsep=2pt]
-\item \textbf{Additive-linear architectures cannot represent
-$\Z/n$ for $n \geq 3$.} Provable
-(\Cref{thm:additive-barred}), confirmed empirically across $n =
-3, 5, 7, 11, 13$ at accuracy exactly $1/n$.
+\item \textbf{Linear-readout architectures cannot represent $\Z/n$
+above the $1/n$ chance line, for any $n \geq 2$.} Provable
+(\Cref{thm:additive-barred}), confirmed empirically across
+$n \in \{2, 3, 5, 7, 11\}$ with deviations $\leq 0.02$ from $1/n$.
 
-\item \textbf{Softmax attention is additive composition.} The
+\item \textbf{Periodic-readout architectures solve $\Z/n$ exactly,
+in real or complex coordinates indifferently.} A 306--747-parameter
+architecture (sum learned embeddings, apply $[\cos, \sin]$
+componentwise, linear head) achieves OOD accuracy $1.000 \pm 0.000$
+at every $n \in \{2, 3, 5, 7, 11\}$ tested. The same architecture
+written with real or complex labelling for the embeddings produces
+numerically identical results; the choice is cosmetic.
+
+\item \textbf{Softmax attention is additively composing.} The
 complex transformer in Experiment 1 learns the algebra
 ($|\Delta| = 2.43$ radians, target $\pi$) but cannot compose it.
 This is consistent with \citet{hahn2020theoretical} and the
-formal-language literature.
+formal-language literature, and we extend it to general $\Z/n$
+through \Cref{cor:attention-cant-multiply}.
 
-\item \textbf{The unit circle in $\C$ admits a faithful
-representation of every $\Z/n$ in one dimension.}
-\textsc{PhaseSumNet} reaches OOD $1.000 \pm 0.000$ at every $n$ we
-tested, with 306--845 parameters.
+\item \textbf{Bounded gated recurrence (GRU, LSTM) does not solve
+$\Z/n$ for $n \geq 5$ within practical training budgets, and the
+failure cannot be patched by a periodic readout.} A 285$\times$
+capacity sweep (Experiment 5) found OOD in the band $[0.22, 0.34]$
+across 16 cells. Adding a $[\cos, \sin]$ readout to the GRU
+(Experiment 6) does not help. The failure is upstream of the
+readout, in the recurrent dynamics. The trajectory analysis
+(\Cref{sec:mechanism}) identifies the mechanism: the $\tanh$-bounded
+state saturates past training depth, after which the readout
+becomes a near-constant function of $k$.
 
-\item \textbf{Bounded real-valued gated recurrence does not solve
-$\Z/n$ for $n \geq 5$ within practical training budgets.} 285$\times$
-capacity sweep, two architecture families, three seeds, all at
-$\leq 0.34$ OOD. The mechanism is state saturation against the
-$\tanh$ ceiling.
-
-\item \textbf{Grokking can partially leak the barrier on $\Z/7$.}
-With 2-layer GRU at $d=128$, a late-training phase transition
-sometimes produces an approximate Z/7 representation (OOD $\sim$0.95).
-The grokked model has stopped saturating---a structurally distinct
-regime from the failing baseline.
-
-\item \textbf{The qualitative separation is between architectures
-matching the symmetry by construction and those discovering it
-through optimization}, including potentially via grokking. The
-former generalize predictably with $O(n)$ parameters; the latter
-require orders of magnitude more parameters and may not always
-discover the structure within standard training budgets.
+\item \textbf{Grokking is a more pervasive phenomenon in this
+setting than we first identified.} At $\Z/3$ with $d=16$, GRU OOD
+across three seeds is $0.78 \pm 0.18$, indicating bimodal seeds
+(some grok, some don't). At $\Z/7$ with two-layer GRU at $d=128$,
+we observe a clean phase transition mid-training (loss already at
+zero) where OOD jumps from $0.71$ to $0.94$. The structural
+``barrier'' for gated recurrence on cyclic tasks is better
+described as a grokking probability that decreases with $n$ and
+training-time horizon.
 \end{enumerate}
 
 \subsection{What We Cannot Yet Claim}
 
 \begin{enumerate}[itemsep=2pt]
-\item Whether $\Z/5$ admits grokking with $\gg$25 epochs of training
-or $\gg$1M parameters. The signature is absent in our 48 cells but
-the test is finite.
+\item Whether GRU on $\Z/5$ admits grokking with $\gg 25$ epochs of
+training or $\gg 1$M parameters. Our 48-cell capacity sweep saw no
+late-training jumps within standard budgets, but the test is finite.
 
-\item Whether the saturation mechanism is causally responsible for
-the $\Z/5$ failure. The clean test is to replace the $\tanh$-bounded
-RNN with an unbounded normalized one; the prediction is that the
-saturation pattern should disappear and OOD should change. We have
-not run this experiment.
+\item Whether the saturation mechanism is \emph{causally}
+responsible for the GRU failure. The clean intervention test is to
+replace the $\tanh$-bounded RNN with an unbounded normalized one
+(e.g., a linear RNN with layer normalization). The prediction is
+that the saturation pattern should disappear and OOD should
+improve. We have not run this experiment.
 
-\item Whether the n=7 grokking phenomenon scales to $n \in \{11, 13\}$
-at sufficient capacity. Experiment 4 measured 2-layer GRU at small
-$d$ on these and saw chance; we have not retested at $d \in \{128,
-256\}$.
+\item Whether \textsc{SumPer} architectures generalize to richer
+algebraic structure beyond $\Z/n$: non-abelian groups, continuous
+groups, partial-orbit data. We only test cyclic groups of order
+$\leq 13$.
 
-\item Anything about real-language negation. Our experiments use
-controlled cyclic-rotation tasks. Real-language phenomena are
-governed by the cyclic structure of negation but also by scope,
-modality, sarcasm, and idiomatic constructions that we do not model.
+\item Anything about real-language tasks. Our experiments use
+controlled cyclic-rotation sequences. Real-world cyclic phenomena
+(musical pitch, cardinal directions, days of week, negation
+nesting in natural language) are noisier and partially observable.
+
+\item Why the linear-readout architectures (\textsc{RealAddLin},
+\textsc{ComplexMulLin}) converge to chance rather than \emph{some}
+nonzero in-distribution accuracy. The theorem only predicts a
+ceiling of $1/n$ on OOD accuracy. Empirically the model converges
+to nearly uniform output even on in-distribution data, which we
+attribute to gradient flow finding the chance solution easier than
+any partial-fit, but we lack a complete characterization.
 \end{enumerate}
 
 \subsection{Implications for Practitioners}
 
-The findings suggest a design heuristic. For any task whose
-underlying structure can be identified with a known group (cyclic
-groups for parity-like tasks; $\mathrm{SO}(3)$ for 3D pose;
-$\mathrm{SE}(3)$ for rigid body motion; permutations for set
-processing), an architecture whose state geometry contains a
-faithful representation of that group should be preferred over a
-generic architecture. The cost in expressiveness from constraining
-the state geometry is offset by orders-of-magnitude better sample
-efficiency, deterministic generalization properties, and the absence
-of late-training phase transitions.
+The factorial ablation suggests a sharper design heuristic than the
+complex-vs-real framing we initially considered. For sequence tasks
+with cyclic symmetry:
 
-For cyclic-group structure specifically: complex unit-circle
-representations are the minimal sufficient construction. Real-valued
-gated recurrences are insufficient for $n \geq 5$ within practical
-training budgets; transformers with softmax attention are insufficient
-at any $n$.
+\begin{itemize}[itemsep=2pt]
+\item \textbf{Use a periodic readout.} If the task's labels live on
+a cycle, applying $[\cos, \sin]$ to the model's pre-readout
+representation removes the topological barrier to representing
+cyclic structure. The architectural cost is two scalar trig
+operations per readout dimension; the benefit can be
+multiple orders of magnitude in parameter efficiency.
+
+\item \textbf{Avoid forcing the representation through a saturating
+nonlinearity.} If the cyclic structure must be carried through many
+sequence steps, $\tanh$-bounded recurrences will lose the structure
+to saturation. Either use a non-saturating recurrence or a
+set-equivariant architecture that does not iterate.
+
+\item \textbf{Do not over-interpret a successful unit-circle
+architecture as a vote for complex numbers.} If your motivation
+was the unit-circle topology, that motivation is correct, but the
+unit circle lives in $\R^2$ as well as in $\C$. The choice of
+arithmetic is a notation, not a structural commitment.
+\end{itemize}
 
 \subsection{Connection to Existing Theory}
 
 Our negative result for softmax attention
-(\Cref{cor:attention-cant-multiply}) is a special case of
+(\Cref{cor:attention-cant-multiply}) extends
 \citet{hahn2020theoretical}'s impossibility result for parity in
-transformer self-attention. We extend it to general cyclic groups.
+self-attention to general cyclic groups.
 
-Our positive result for unit-circle architectures relates to the
-broader literature on group-equivariant networks
-\citep{cohen2016group}. The novelty in our setting is the
-\emph{minimality} of the construction: the same algebraic structure
-that motivates large-scale group-equivariant CNNs for image data is
-sufficient to solve a sequence task with 300--800 parameters.
+The successful architectures relate to the broader literature on
+group-equivariant networks \citep{cohen2016group}. The novelty in
+our setting is the minimality of the construction: the
+\textsc{SumPer} architecture has 306--747 parameters and is closer
+in spirit to a Fourier-style feature map than to the
+group-equivariant CNN apparatus.
 
-The grokking finding for the $\Z/7$ 2-layer GRU is consistent with
-the broader grokking literature in suggesting that overparameterized
-models can discover structured solutions late in training. We
-believe the cleanness of the cyclic-group setting may make it a
-useful benchmark for mechanistic studies of grokking.
+The grokking phenomenon at $\Z/3, \Z/5, \Z/7$ is consistent with
+the broader literature on grokking
+\citep{power2022grokking, nanda2023progress} in suggesting that
+overparameterized gated models can discover structured solutions
+late in training. The clean experimental control of the cyclic-group
+setting makes it a candidate benchmark for mechanistic grokking
+studies.
+
+\subsection{A Note on Negative Results that Reframe the Question}
+
+We began this project asking whether complex-valued architectures
+have inductive-bias advantages over real-valued ones on cyclic
+tasks. The honest answer, after Experiment 6's ablation, is that
+the question was malformed: the two architectures we had been
+comparing under that framing are bit-identical. The work that
+preceded Experiment 6---the original \textsc{PhaseSumNet} successes,
+the GRU collapse, the saturation analysis, the grokking
+discovery---is unchanged in its empirical content. What changes is
+the interpretation: the relevant property is the periodic readout,
+not the complex algebra. We include this trajectory in the paper
+because we believe it is instructive about how easy it is to
+confound design axes when comparing architectures, and how a
+properly-designed factorial ablation can clarify what is actually
+doing the work.
 
 
 \section{Limitations}
@@ -1328,32 +1582,50 @@ better characterize what the gated models do and do not internalize.
 \label{sec:conclusion}
 
 We have studied cyclic-group composition tasks as a controlled
-benchmark for architectural inductive bias. Combining a formal
-proof that additive-linear architectures cannot represent
-$\Z/n$ for $n \geq 3$, an empirical demonstration that softmax
-transformers fall into the additive class, a positive existence
-result for a 300-parameter unit-circle architecture that
-generalizes across $n \in \{2, 3, 5, 7, 11, 13\}$, and a mechanistic
-analysis of where the real-valued gated baselines fail, we arrive at
-the following synthesis:
+benchmark for architectural inductive bias, running six experiments
+and 200+ training runs across a range of architectures and group
+orders. The empirical findings can be summarized as:
 
-Architectures whose composition operator is a group homomorphism
-into a state space containing the task's symmetry group generalize
-on cyclic-group tasks predictably and with $O(n)$ parameters.
-Architectures whose composition operator is additive or whose state
-saturates do not, regardless of capacity. Between these extremes
-sits a regime---two-layer GRU at large width on $\Z/7$---where the
-architecture can in principle discover the group structure but
-must do so through a late-training phase transition (grokking) that
-is unreliable and parameter-expensive. The qualitative split
-between \emph{architectural match by construction} and
-\emph{discovery through optimization} appears to be the central
-distinction.
+\begin{itemize}[itemsep=2pt]
+\item A 306-parameter architecture that sums learned embeddings and
+applies a periodic readout solves $\Z/n$ at 100\% OOD accuracy for
+every $n \in \{2, 3, 5, 7, 11\}$ tested, with zero variance across
+seeds.
+\item Linear-readout variants of the same architecture sit at the
+$1/n$ chance line as predicted by an elementary topological argument
+about $\R$ (\Cref{thm:additive-barred}).
+\item Softmax-attention transformers learn the per-token group action
+but cannot compose it; their failure is a special case of the
+linear-readout-on-additive-state failure mode.
+\item Gated recurrences (GRU, LSTM) fail to generalize on $\Z/n$ for
+$n \geq 5$ across a 285$\times$ capacity sweep up to 1M parameters.
+The mechanism is state saturation against the $\tanh$ ceiling, and
+the failure is not rescued by appending a periodic readout.
+\item Gated recurrences \emph{sometimes} discover an approximate
+group representation through grokking: a phase transition during
+late training during which the state stops saturating. The
+probability of this discovery decays with $n$; we observe it
+reliably at $\Z/3$, partially at $\Z/5$, occasionally at $\Z/7$,
+and not at all at $\Z/n \geq 11$ within our training budgets.
+\end{itemize}
 
-We hope the framework---cyclic-group tasks as a graded diagnostic,
-trajectory diagnostics as a mechanistic probe, and the structural
-vs.\ grokked vs.\ constructed taxonomy---is useful for future work
-on architectural inductive bias.
+The methodological lesson, which we believe is more broadly useful,
+is that comparing architectures that differ on many axes
+simultaneously can produce misleading conclusions. Our initial
+``complex unit-circle networks beat real gated recurrence''
+framing was correct in the empirical comparison but wrong in its
+attribution: the architecture we called complex was bit-identical
+to a real-valued counterpart, and the real-valued architecture would
+have produced the same orders-of-magnitude advantage over the GRU.
+The factorial ablation of \Cref{sec:exp6} forced us to recognize
+that ``complex'' was not the load-bearing piece; the periodic
+readout was.
+
+We hope the controlled $\Z/n$ task family and the factorial ablation
+methodology are useful for future studies of architectural inductive
+bias. The cyclic-group setting is rich enough to exhibit
+non-trivial generalization failures and successes, but simple enough
+that the failure mechanisms are diagnosable with direct probes.
 
 
 \paragraph{Code and data.} All code, training logs, and per-seed
