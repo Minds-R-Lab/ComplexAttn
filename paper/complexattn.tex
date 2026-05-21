@@ -1,0 +1,1436 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{microtype}
+\usepackage{cleveref}
+\usepackage[round,authoryear]{natbib}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black,
+}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\T}{\mathbb{T}}
+\newcommand{\given}{\,\vert\,}
+\newcommand{\eps}{\varepsilon}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\sgn}{sgn}
+\DeclareMathOperator{\rank}{rank}
+
+\title{
+  Cyclic-Group Composition as a Diagnostic for Architectural
+  Inductive Bias:\\
+  \large Why Complex Unit-Circle Networks Generalize Where Real-Valued
+  Gated Recurrences Do Not
+}
+
+\author{Minds-R-Lab}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We ask when, if ever, complex-valued neural architectures offer
+inductive-bias advantages over real-valued ones. To make the
+question crisp we study cyclic-group composition tasks: sequences
+containing one of $n$ atoms and $k$ instances of a single
+``rotation'' token, with label $(c + k) \bmod n$, training on
+$k \in \{0,\ldots,K_\text{tr}\}$ and evaluating on $k$ up to $4K_\text{tr}$.
+Across five experiments and 200+ training runs we find:
+(i)~A 303{,}000-parameter complex transformer with Hermitian
+attention learns a phase-flip representation of the rotation token
+(77\% of probe pairs near $\pi$ on $\Z/2$) but cannot compose
+it---softmax weights sum to one, forcing additive composition.
+(ii)~A 273-parameter set-equivariant phase-sum network
+(\textsc{PhaseSumNet}) generalizes perfectly to out-of-distribution
+depths on $\Z/n$ for every $n \in \{2,3,5,7,11,13\}$ tested, with
+zero variance across seeds.
+(iii)~Real-valued gated recurrences (GRU, LSTM) solve $\Z/2$ and
+$\Z/3$ but collapse to chance ($1/n$) on $\Z/5$ across a 285$\times$
+capacity sweep from 4k to 1M parameters. The mechanism is
+state saturation against the $\tanh$ ceiling, after which the
+linear readout becomes a near-constant function of $k$.
+(iv)~On $\Z/7$ with two-layer GRU at large width, the barrier
+\emph{leaks via grokking}: a late-training phase transition (loss
+already at zero) sometimes finds an approximately periodic state
+trajectory that partially aligns with the readout, reaching OOD
+accuracy 0.95. Across every condition, the complex unit-circle
+architecture solves the task two-to-three orders of magnitude more
+efficiently in parameters, with no phase transition. We argue that
+the qualitative separation is between architectures whose
+composition operator is a group homomorphism by construction and
+those that must discover one through optimization.
+\end{abstract}
+
+\section{Introduction}
+
+A familiar story in deep learning attributes empirical success to
+flexible function approximators trained on enough data with enough
+compute. A second story, less often told but equally important, is
+that the architecture's \emph{built-in symmetries} determine what it
+can generalize to from finite data: a convolutional network
+generalizes across spatial translations because translation-equivariance
+is hardwired; a permutation-invariant set network generalizes across
+input orderings because it cannot tell them apart in the first place;
+a transformer with rotary positional encoding generalizes
+to unseen positions roughly to the extent that its relative-position
+construction is faithful to a continuous group action.
+
+This paper asks a sharp version of the second question. \emph{Given a
+synthetic task whose semantics is governed exactly by the cyclic group
+$\Z/n\Z$, which architectures generalize across the group, and why?}
+The question has a known partial answer: architectures that
+\emph{represent} the group action---either by construction or by
+training---generalize, while architectures that do not, do not. The
+contribution of this paper is to make this folk wisdom mathematically
+precise on a controlled task family, characterize the failure modes of
+several common architectures (transformer, GRU, LSTM, additive
+linear), and identify a previously-unnoticed phenomenon: even when an
+architecture is in principle capable of representing the group, doing
+so may require an optimization-time phase transition (grokking) that
+does not occur for natively-symmetric architectures.
+
+\subsection{Contributions}
+
+\begin{enumerate}[leftmargin=*, itemsep=2pt]
+\item We formalize a cyclic-group composition task on $\Z/n\Z$ and
+prove that any additive architecture composing token embeddings with
+a linear readout produces logits linear in the rotation count $k$,
+which cannot represent $(c+k) \bmod n$ for $n \geq 3$. The model
+provably converges to uniform output (\Cref{thm:additive-barred}).
+
+\item We exhibit a minimal architecture, \textsc{PhaseSumNet}, that
+represents the group action by construction via unit-circle phases.
+It achieves OOD accuracy $1.000 \pm 0.000$ across $n \in
+\{2,3,5,7,11,13\}$ with 306--845 parameters.
+
+\item We show that softmax-attention transformers learn the
+single-token group action (probe: 77\% of rotation pairs near $\pi$
+on $\Z/2$) but fail to compose it, because softmax weights summing to
+one make attention an additive composition operator
+(\Cref{prop:attention-additive}).
+
+\item Across a capacity sweep of GRU and LSTM from 4{,}000 to
+1{,}060{,}000 parameters, real-valued gated recurrence fails on
+$\Z/5$ at chance ($1/n$), with the mechanism identified by trajectory
+analysis: $\tanh$-bounded state saturates past training depth,
+producing constant logits.
+
+\item On $\Z/7$ with two-layer GRU at large width, we observe
+\emph{grokking}: a phase transition during late training where the
+model's OOD accuracy jumps from $\sim$0.70 to $\sim$0.95 while
+training loss has been zero for thousands of steps. The grokked
+model's state has stopped saturating; its trajectory diagnostics
+place it precisely between the failing baseline and the
+unit-circle reference.
+\end{enumerate}
+
+\subsection{Roadmap}
+
+\Cref{sec:background} reviews related work on complex networks,
+group-equivariant architectures, length generalization, and grokking.
+\Cref{sec:framework} develops the theoretical framework: cyclic-group
+composition tasks, the question of architectural representability,
+and the negative theorem for additive-linear architectures.
+\Cref{sec:task,sec:architectures} describe the task family and the
+six architectures we study. \Cref{sec:exp1,sec:exp2,sec:exp3,sec:exp4,sec:exp5}
+report the five experiments. \Cref{sec:mechanism} performs trajectory
+analysis to identify the GRU failure mechanism and the $\Z/7$
+grokking phenomenon. \Cref{sec:discussion} discusses what the
+findings collectively imply, with explicit limitations.
+
+
+\section{Background and Related Work}
+\label{sec:background}
+
+\paragraph{Complex-valued neural networks.}
+\citet{trabelsi2018deep} provide a comprehensive blueprint for
+training complex-valued networks at scale, including modReLU,
+complex batch normalization, and complex initialization schemes.
+Earlier, \citet{arjovsky2016unitary} proposed unitary RNNs whose
+recurrent transitions are constrained to lie on the unitary group,
+arguing that the resulting orbit structure stabilizes long-range
+dependencies. \citet{sordoni2013modeling} applied complex amplitudes
+to language modeling in an information-retrieval setting. Despite
+this body of work, complex-valued networks have remained niche; one
+recurring critique is that they have not produced demonstrable
+advantages over real-valued networks at matched parameter counts on
+standard benchmarks.
+
+\paragraph{Group-equivariant architectures.}
+\citet{cohen2016group} formalized group equivariance for CNNs,
+extending to non-Euclidean groups in subsequent work. The unifying
+principle---that an architecture should commute with the symmetry
+group acting on its input space---has produced equivariant networks
+for $\mathrm{SE}(3)$ molecular dynamics, $\mathrm{SO}(3)$ point
+clouds, and others. The cyclic group $\Z/n$ is the simplest
+non-trivial group with finite order, and serves here as a minimal
+benchmark for the broader equivariance question.
+
+\paragraph{Length and depth generalization in sequence models.}
+\citet{hahn2020theoretical} proves that softmax self-attention cannot
+recognize certain regular languages---specifically parity---in the
+infinite-length limit, a result we use to interpret our $\Z/2$
+transformer experiment. \citet{bhattamishra2020ability} empirically
+confirms that transformers fail to learn parity at depths beyond
+their training distribution. Our $\Z/n$ task family generalizes
+parity to arbitrary cyclic groups and provides a graded difficulty
+spectrum.
+
+\paragraph{Grokking.}
+\citet{power2022grokking} introduced the term \emph{grokking} for a
+training pattern in which a network reaches near-perfect training
+accuracy quickly but generalization on a held-out set emerges only
+after a long period of further training. Subsequent work
+\citep{nanda2023progress, liu2022omnigrok} has connected grokking to
+the slow discovery of low-norm or structured solutions in
+overparameterized models. Our $\Z/7$ result connects grokking to the
+specific question of whether an architecture's gradient descent can
+\emph{discover} a group-respecting representation late in training,
+absent that representation being built in.
+
+\paragraph{Length generalization on algorithmic tasks.}
+\citet{anil2022exploring,zhou2023algorithms,jelassi2024repeat} report
+that transformers struggle with length generalization on
+algorithmic tasks (parity, addition, copying) and analyze the
+specific failure modes. Our work is in the same lineage but uses a
+cleaner $\Z/n$ family to isolate the algebraic structure from
+positional encoding details.
+
+
+\section{Theoretical Framework}
+\label{sec:framework}
+
+\subsection{Cyclic-Group Composition Tasks}
+
+Fix $n \in \N_{\geq 2}$. The \emph{cyclic-group composition task} on
+$\Z/n\Z$ is defined by the following data-generating process. The
+input alphabet $\Sigma$ consists of:
+\begin{itemize}[itemsep=2pt]
+\item $n$ \emph{atom} tokens $a_0, a_1, \ldots, a_{n-1}$, each carrying
+a class label;
+\item one \emph{rotation} token $\tau$ ("TWIRL");
+\item $F$ semantically inert \emph{filler} tokens $f_1, \ldots, f_F$.
+\end{itemize}
+A sample $\mathbf{x} = (x_1, x_2, \ldots, x_L)$ is constructed by
+choosing an atom class $c \in \{0, \ldots, n-1\}$ uniformly at random,
+a rotation count $k$ from a specified distribution, and a filler count
+$\phi$, then placing $a_c$ together with $k$ copies of $\tau$ and
+$\phi$ fillers in a uniformly random order. The label is
+\[
+y(\mathbf{x}) \;=\; (c + k) \bmod n.
+\]
+The task is order-invariant by construction: $y$ depends only on
+which atom is present and how many rotations there are.
+
+Concretely, training samples draw $k$ uniformly from
+$\{0, 1, \ldots, K_\text{tr}\}$; evaluation samples are
+\emph{depth-stratified}: equal numbers at each $k \in
+\{0, 1, \ldots, K_\text{eval}\}$ with $K_\text{eval} \gg K_\text{tr}$.
+A model that has learned the group structure should achieve
+$\sim$100\% accuracy on every $k$. A model that has learned a
+lookup table over training depths will achieve 100\% on
+$k \leq K_\text{tr}$ and degrade on the out-of-distribution (OOD)
+depths $K_\text{tr} < k \leq K_\text{eval}$.
+
+\subsection{What Does It Mean for an Architecture to ``Represent'' the Group?}
+
+\begin{definition}[Group-respecting architecture]
+\label{def:group-respecting}
+Let $\mathcal{A}$ be a sequence-to-class architecture mapping inputs
+$\mathbf{x} \in \Sigma^*$ to logits $\ell(\mathbf{x}) \in \R^n$. We
+say $\mathcal{A}$ is \emph{group-respecting} for $\Z/n$ on the
+composition task if there exists a representation $\rho: \Z/n \to
+\mathrm{GL}(V)$ on some real or complex vector space $V$, a class
+embedding $\phi: \{a_0, \ldots, a_{n-1}\} \to V$, a filler-invariant
+state space $\mathcal{H}$, and a readout $R: V \to \R^n$ such that
+the architecture's computation is equivalent to
+\begin{equation}
+\label{eq:group-respecting}
+\ell(\mathbf{x}) \;=\; R\bigl( \rho(k)\, \phi(c) \bigr),
+\end{equation}
+where $c, k$ are the atom class and rotation count of $\mathbf{x}$,
+and the readout satisfies the homomorphism property
+$R(\rho(k+\Delta) v) = R(\rho(\Delta)\, \rho(k) v)$ for all
+$k, \Delta, v$.
+\end{definition}
+
+The architectural separation we study is whether
+\Cref{eq:group-respecting} holds \emph{by construction} (some
+architectures), can be \emph{discovered} by training (others), or is
+provably unattainable regardless of parameters and training
+(\Cref{thm:additive-barred} below).
+
+\subsection{The Negative Theorem for Additive-Linear Architectures}
+\label{subsec:negative-theorem}
+
+We now state the result that determines the lower bound of the
+spectrum.
+
+\begin{definition}[Additive-linear architecture]
+An architecture is \emph{additive-linear} if its logits take the form
+\[
+\ell(\mathbf{x}) \;=\; W \!\left( \sum_{t=1}^{L} e(x_t) \right) + b
+\;\in\; \R^n,
+\]
+for some embedding $e: \Sigma \to \R^d$, readout matrix
+$W \in \R^{n \times d}$, and bias $b \in \R^n$.
+\end{definition}
+
+\begin{theorem}[Additive-linear cannot represent $\Z/n$ above chance]
+\label{thm:additive-barred}
+Let $\mathcal{A}$ be an additive-linear architecture and let
+$y(\mathbf{x}) = (c + k) \bmod n$ be the cyclic-group composition
+task on $\Z/n\Z$ with $n \geq 2$. There is no choice of $e$, $W$,
+$b$ such that $\argmax_j \ell_j(\mathbf{x}) = y(\mathbf{x})$ for all
+sufficiently long $k$ trajectories. In particular, no additive-linear
+model can achieve OOD accuracy above $1/n$ on the depth-stratified
+evaluation distribution with $K_\mathrm{eval} > 2n$.
+\end{theorem}
+
+\begin{proof}
+Fix the atom class $c$ and let the filler contribution be folded into
+a constant offset (we may assume the optimal model assigns
+$e(f_i) = 0$ for all fillers, since fillers carry no signal). For an
+input with exactly $k$ rotation tokens the logits become
+\[
+\ell_j(c, k) \;=\; W_{j, :}\,\bigl(e(a_c) + k \cdot e(\tau)\bigr) + b_j
+\;=\; \alpha_j(c) + \beta_j \cdot k,
+\]
+with $\alpha_j(c) = W_{j,:} e(a_c) + b_j$ and
+$\beta_j = W_{j,:} e(\tau)$, both independent of $k$. Each class
+logit is therefore an affine function of $k$ with slope $\beta_j$
+that does not depend on the atom class $c$.
+
+For the model to predict class $j$ at rotation count $k$ we need
+$\ell_j(c, k) > \ell_{j'}(c, k)$ for all $j' \neq j$. This is the
+condition $(\beta_j - \beta_{j'}) k > \alpha_{j'}(c) - \alpha_j(c)$
+for all $j' \neq j$, a system of $n-1$ linear inequalities in $k$.
+If $\beta_j > \beta_{j'}$ this holds for all sufficiently large
+$k$; if $\beta_j < \beta_{j'}$ it holds for all sufficiently small
+$k$. Therefore there is at most one class $j^*$ (the one with
+largest slope $\beta_{j^*}$) for which $\ell_{j^*}$ becomes the
+argmax for all large enough $k$.
+
+The correct label, however, cycles: $y(c, k) = (c + k) \bmod n$
+takes every value in $\{0, 1, \ldots, n-1\}$ as $k$ ranges over any
+window of length $n$. For $K_\text{eval} > 2n$, the
+correct label takes each of $n$ values on (approximately) $1/n$ of
+the OOD depths. The model predicts $j^*$ on all of them. Hence the
+model is correct at most $\frac{1}{n}$ of the time on sufficiently
+long OOD trajectories.
+\end{proof}
+
+\begin{remark}[Topology]
+\label{rem:topology}
+The mechanism behind \Cref{thm:additive-barred} is the topology of
+$\R$: at most $n-1$ pairwise-line crossings can occur between any
+$n$ affine functions of a single variable, so the argmax has at
+most $n-1$ transitions and is eventually constant in $k$. The
+unit circle in $\C$ avoids this restriction precisely because it
+has no point at infinity, and a continuous trajectory along it can
+visit all $n$ ``slots'' an unbounded number of times.
+\end{remark}
+
+\begin{remark}[Strengthening]
+The proof in fact rules out \emph{any} architecture whose logits
+are an affine function of token count $k$ in some specified token,
+regardless of how nonlinear the upstream embedding is. The bound
+extends to in-distribution accuracy whenever
+$K_\mathrm{tr} \geq n-1$: the same argmax-transition bound applies
+to the union of ID and OOD points. Inspecting the trained
+\textsc{RealAddNet} on $\Z/3$ ($K_\mathrm{tr} = 5 > 2$), the
+per-class slope spread $\max_j \beta_j - \min_j \beta_j$ is
+$0.020 \pm 0.005$ across seeds, indicating the optimizer converged
+to nearly-equal slopes and effectively uniform logits---consistent
+with the theorem-bounded failure.
+\end{remark}
+
+\begin{remark}[$n=2$ caveat]
+\label{rem:n-equals-2}
+At $n=2$, the bound $1/n = 1/2$ numerically coincides with chance,
+so the failure is less visually dramatic than for $n=3$ (chance
+$0.333$) or $n=13$ (chance $0.077$). We measure
+\textsc{RealAddNet} OOD accuracy of $0.505 \pm 0.015$ on $\Z/2$,
+which is at chance and consistent with the theorem. The
+representational impossibility is the same; only the visibility
+of the failure differs.
+\end{remark}
+
+\subsection{Softmax Attention is Additive Composition}
+\label{subsec:attention-additive}
+
+The same argument extends to a broad class of attention-based
+architectures.
+
+\begin{proposition}[Softmax attention as a stochastic convex combination]
+\label{prop:attention-additive}
+Let an attention layer compute its output at query position $q$ as
+$z_q = \sum_{t} \alpha_{q,t} \, v(x_t)$, where the attention weights
+$\alpha_{q,t} \geq 0$ satisfy $\sum_t \alpha_{q,t} = 1$, and $v$ is
+the value projection. Then $z_q$ is a convex combination of value
+vectors, and its magnitude is bounded by $\max_t \|v(x_t)\|$.
+\end{proposition}
+
+The proposition is a consequence of the softmax constraint and is
+not novel. Its relevance here is the following corollary, which
+makes precise what \citet{hahn2020theoretical} showed for parity in
+the formal-language setting.
+
+\begin{corollary}[Attention cannot multiply]
+\label{cor:attention-cant-multiply}
+Let $\rho: \Z/n \to \mathrm{GL}(V)$ be a faithful representation
+acting by multiplication: $\rho(k_1+k_2) = \rho(k_1)\rho(k_2)$.
+Suppose an architecture $\mathcal{A}$ computes, at its output
+position, a single softmax-attention aggregation over per-token
+value vectors $v(x_t)$ followed by a linear readout. Then $\mathcal{A}$
+cannot represent $\rho(k) v$ for arbitrary $k$ via the attention
+output, because the attention output is a convex combination of the
+$v(x_t)$ values, which lies in their convex hull, while
+$\rho(k)\, v(x_t)$ ranges over orbits in $V$ that exit any convex
+hull for sufficiently large $k$ in general.
+\end{corollary}
+
+In short: attention can mix tokens, but it cannot multiply them.
+The complex-valued attention we test in \Cref{sec:exp1} learns
+the correct per-token rotation $\rho(\tau) \approx -I$ in its
+embedding, but the architecture's composition operator
+(attention) is unable to use it.
+
+\subsection{What Unit-Circle Phases Buy}
+\label{subsec:unit-circle}
+
+The simplest architecture satisfying the homomorphism condition
+\Cref{eq:group-respecting} for arbitrary $\Z/n$ uses the unit
+circle in $\C$ as its state space.
+
+\begin{definition}[Phase-sum architecture]
+\label{def:phasesum}
+Let each token $x \in \Sigma$ be assigned a phase vector
+$\theta(x) \in \R^d$. The phase-sum architecture computes
+\begin{equation}
+\Theta(\mathbf{x}) = \sum_{t=1}^{L} \theta(x_t) \in \R^d,
+\qquad
+\ell(\mathbf{x}) = R\bigl( \cos\Theta(\mathbf{x}),\, \sin\Theta(\mathbf{x}) \bigr),
+\end{equation}
+where $R$ is a linear readout $\R^{2d} \to \R^n$, and $\cos,\sin$
+are applied componentwise.
+\end{definition}
+
+\begin{proposition}[Phase-sum is group-respecting for every $\Z/n$]
+\label{prop:phasesum-respects}
+For any $n \geq 2$, the phase-sum architecture admits a parameter
+setting with $d=1$ such that
+$\ell(\mathbf{x}) = R'(\rho(k) \cdot \phi(c))$ in the sense of
+\Cref{def:group-respecting}, where $\rho(k)$ acts on $\C$ by
+multiplication by $e^{2\pi i k / n}$.
+\end{proposition}
+
+\begin{proof}
+Choose $\theta(a_c) = 2\pi c / n$ for $c = 0, \ldots, n-1$,
+$\theta(\tau) = 2\pi / n$, and $\theta(f_i) = 0$ for all fillers.
+Then $\Theta(\mathbf{x}) = 2\pi(c+k)/n$, and $(\cos\Theta, \sin\Theta)
+\in \R^2$ identifies with the point $e^{2\pi i (c+k)/n}$ on the
+unit circle. The unit circle contains exactly $n$ points
+$e^{2\pi i j/n}$ for $j = 0, \ldots, n-1$, and these are linearly
+separable in $\R^2$ (any $n$ points on a circle in general position
+are). A linear readout $R'$ that picks out the correct class from
+the position on the unit circle exists.
+\end{proof}
+
+\begin{remark}
+The proof exhibits a $d=1$ solution. In practice we initialize with
+$d=16$ phase dimensions, providing redundant routes to the optimal
+solution; the trained network typically realizes the group action
+only in a subset of dimensions and the readout learns to ignore the
+rest. We discuss the empirical convergence properties in
+\Cref{sec:exp2}.
+\end{remark}
+
+\subsection{The Saturation Failure of Bounded Real-Valued Recurrence}
+\label{subsec:saturation}
+
+Real-valued gated recurrences (GRU, LSTM) constrain their hidden
+state to lie in $[-1, 1]^d$ via the $\tanh$ activation. This
+boundedness is usually a virtue (gradient stability), but in our
+setting it produces a specific failure mode: \emph{saturation} past
+the training depth.
+
+We will show empirically (\Cref{sec:mechanism}) that for the GRU on
+$\Z/5$, the hidden-state magnitude $\|h(k)\|$ grows monotonically
+with rotation count $k$ from $\sim$5.12 at $k=0$ to $\sim$7.04 at
+$k=30$, asymptoting against the bound. Once saturated, the linear
+readout's output becomes a near-constant function of $k$, and the
+argmax is constant. A constant argmax over $n$ balanced classes
+scores $1/n$ in expectation. This precisely matches our measured
+asymptote of $\sim 0.25$ for $\Z/5$ and $\sim 0.14$ for $\Z/7$.
+
+We give an informal argument for why this happens. The GRU update
+$h_{t+1} = (1-z_t) h_t + z_t \tilde{h}_t$ with
+$\tilde{h}_t \in (-1, 1)^d$ produces an exponentially-weighted
+moving average of bounded targets. When the input is a long
+homogeneous sequence of one token, the candidate $\tilde{h}_t$
+becomes approximately constant, and $h_t$ exponentially converges
+to that fixed point. Across the training distribution (depths
+$k \leq K_\text{tr}$), the model can configure this fixed point to
+encode useful information about the partial state. Beyond $K_\text{tr}$,
+the convergence to fixed point dominates, and information about
+$k \bmod n$ that was carried in transient state dynamics is lost.
+
+This argument predicts that an unbounded real-valued recurrence
+(e.g., a linear RNN with appropriate normalization) might escape the
+saturation. We do not test this directly in the present paper, but
+identify it as a target follow-up.
+
+
+\section{The Task Family}
+\label{sec:task}
+
+We instantiate the cyclic-group composition task with the following
+parameters across experiments. The vocabulary contains a
+\texttt{PAD} token, a \texttt{CLS} token (used by the transformer
+architectures of \Cref{sec:exp1}), the $n$ atom tokens, the rotation
+token $\tau$, and 10 filler tokens. Sequences are zero-padded to the
+maximum length within each batch. The atom appears exactly once per
+sequence; rotation count $k$ is drawn uniformly from
+$\{0, \ldots, K_\text{tr}\}$ during training and from each integer in
+$\{0, \ldots, K_\text{eval}\}$ separately during evaluation
+(depth-stratified). Filler count is drawn uniformly from
+$\{0, \ldots, 8\}$.
+
+The atom and rotations are placed in uniformly random order within
+the body of the sequence, so positional templates cannot help. This
+order-invariance is what makes a set-equivariant architecture
+(\Cref{def:phasesum}) the architecturally-correct choice.
+
+The cardinal experiment parameter choices are summarized in
+\Cref{tab:task-params}.
+
+\begin{table}[h]
+\centering
+\caption{Task and training parameters across experiments.}
+\label{tab:task-params}
+\begin{tabular}{lcccc}
+\toprule
+Experiment & Group $\Z/n$ & $K_\mathrm{tr}$ & $K_\mathrm{eval}$ & Seeds \\
+\midrule
+1: complex transformer & $\Z/2$ & 3  & 10 & 5 \\
+2: recurrent architectures on $\Z/2$ & $\Z/2$ & 3  & 15 & 5 \\
+3: $\Z/3$ separation test & $\Z/3$ & 5  & 20 & 5 \\
+4: scaling sweep & $\Z/n$, $n\in\{2,3,5,7,11,13\}$ & 5 & 20 & 3 \\
+5: capacity sweep & $\Z/5, \Z/7$ & 5 & 20 & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\section{Architectures}
+\label{sec:architectures}
+
+We compare six architectural families, each described below with its
+relation to the theoretical framework of \Cref{sec:framework}.
+
+\subsection{Complex Transformer (\textsc{ComplexTransformer})}
+
+A pre-norm transformer encoder operating on $\C^d$ hidden states.
+Attention uses the Hermitian inner product
+$\langle q, k \rangle_H = \mathrm{Re}(q^* k)$. Nonlinearity is
+modReLU \citep{trabelsi2018deep}:
+$\mathrm{modReLU}(z) = \mathrm{ReLU}(|z| + b)\cdot z / (|z| + \eps)$.
+Positional encoding is $e^{i \omega_d t}$ on each complex
+dimension. A \texttt{CLS} token's complex hidden state is read out
+via $\mathrm{Re}(w^* h_\mathrm{CLS})$ for logits. Parameter count is
+matched to a real-valued baseline transformer of the same depth and
+head count: 303k parameters at $d=64$ vs. 310k for the real model at
+$d=92$.
+
+By \Cref{cor:attention-cant-multiply}, the architecture cannot
+multiplicatively compose per-token group actions, regardless of how
+faithfully the individual token embeddings learn the action.
+
+\subsection{Phase-Sum Network (\textsc{PhaseSumNet})}
+
+\Cref{def:phasesum}. For task $\Z/n$, the readout is linear
+$\R^{2d} \to \R^n$. We use $d=16$ throughout (giving 16 redundant
+phase dimensions). Initialization is critical: phases are drawn
+uniformly from $[-\pi, \pi]$. We discuss why in
+\Cref{subsec:init-matters}.
+
+\subsection{Real Additive Network (\textsc{RealAddNet})}
+
+The negative-control architecture of \Cref{thm:additive-barred}:
+\[
+\ell(\mathbf{x}) = W\!\left(\sum_t e(x_t)\right) + b,
+\]
+with $e: \Sigma \to \R^{2d}$, $W \in \R^{n \times 2d}$. By the
+theorem, this architecture cannot exceed $1/n$ accuracy on
+$\Z/n$ for $n \geq 3$.
+
+\subsection{Gated Complex RNN (\textsc{GatedComplexRNN})}
+
+A bidirectional recurrent network with $\C^d$ hidden states. Each
+token $x$ induces an update
+\begin{align}
+\hat{h}_t &= \exp(i\,\theta(x))\, h_t + v(x), \\
+h_{t+1} &= (1 - g(x)) h_t + g(x) \hat{h}_t,
+\end{align}
+where $\theta(x) \in \R^d$ is a learned per-dimension phase rotation,
+$v(x) \in \C^d$ a learned complex additive contribution, and
+$g(x) \in (0,1)^d$ a sigmoid gate. Composition is multiplicative
+via the rotation $e^{i\theta(\tau)}$ for the rotation token; the
+architecture is in principle group-respecting if the model learns
+$\theta(\tau) = 2\pi/n$ and $g(\tau) \to 1$, $v(\tau) \to 0$.
+
+\subsection{GRU and LSTM Baselines (\textsc{GRU}, \textsc{LSTM})}
+
+Standard bidirectional single- and two-layer GRU and LSTM, with a
+final linear readout from concatenated forward/backward final
+states. Real-valued, $\tanh$-bounded hidden state. These are
+parameter-matched (within a few percent) to \textsc{GatedComplexRNN}
+in \Cref{sec:exp4}, then scaled up to $\sim$1M parameters in
+\Cref{sec:exp5}.
+
+\subsection{Initialization Considerations}
+\label{subsec:init-matters}
+
+For both \textsc{PhaseSumNet} and \textsc{GatedComplexRNN}, the
+phase embedding $\theta$ must be initialized uniformly on
+$[-\pi, \pi]$, not near zero. With near-zero initialization, every
+sequence produces $\cos\Theta \approx 1, \sin\Theta \approx 0$, so
+logits are nearly constant across inputs and gradient signal is too
+weak to escape. With uniform initialization, sequences are spread
+across the unit circle from the start and learning proceeds. We
+mention this because the convergence depends sensitively on it and
+because the failure mode (nominally trainable architecture sits at
+chance forever) is otherwise puzzling.
+
+
+\section{Experiment 1: Complex Transformer on $\Z/2$}
+\label{sec:exp1}
+
+\paragraph{Setup.} Train both \textsc{ComplexTransformer} ($d=64$,
+303k params) and a parameter-matched real transformer ($d=92$, 310k
+params) on $\Z/2$ parity-of-negation: a single atom $\in \{T, F\}$,
+$k$ \texttt{NOT} tokens, fillers in random order, with label
+$\mathrm{atom\_sign} \cdot (-1)^k$. Train depths $k \in \{0,1,2,3\}$,
+evaluate $k \in \{0, \ldots, 10\}$, 5 seeds, AdamW with
+cosine-decayed learning rate.
+
+\paragraph{Probe.} For the complex model we additionally measure the
+\emph{phase shift induced by a single \texttt{NOT}}. For paired
+sequences $(s, s')$ differing only by one extra \texttt{NOT}, we
+compute the angle $\Delta = \arg(h_\mathrm{CLS}(s') / h_\mathrm{CLS}(s))$
+in each complex dimension. A model that has learned \texttt{NOT}
+as multiplication by $-1$ should produce $\Delta \approx \pi$ in
+every dimension.
+
+\paragraph{Results.}
+
+\begin{table}[h]
+\centering
+\caption{Experiment 1: 5-seed averages on $\Z/2$. ID = in-distribution
+accuracy ($k \leq 3$), OOD = out-of-distribution accuracy
+($4 \leq k \leq 10$). Probe column applies only to the complex model.}
+\label{tab:exp1-results}
+\begin{tabular}{lcccc}
+\toprule
+Model & Params & ID acc & OOD acc & Probe: $|\Delta|$ \\
+\midrule
+Real Transformer    & 309{,}765 & $1.000 \pm 0.000$ & $0.488 \pm 0.005$ & ---  \\
+Complex Transformer & 302{,}978 & $1.000 \pm 0.000$ & $0.445 \pm 0.005$ & $2.43$ rad (target $\pi$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Interpretation.} Both transformers achieve perfect ID
+accuracy and fall to near-chance OOD. The complex model is
+slightly \emph{worse} than the real one. However, the phase probe
+reveals that the complex model \emph{did} learn the algebra: the
+mean rotation induced by a single \texttt{NOT} is 2.43 radians (vs
+target $\pi = 3.14$), and 77\% of dimension-paired sequences land
+within $\pi/8$ of $\pi$. A randomly-initialized network gives
+$|\Delta| \approx 0.17$.
+
+The failure is therefore not in the per-token representation but
+in composition. By
+\Cref{prop:attention-additive,cor:attention-cant-multiply}, softmax
+attention is forced to mix token contributions additively; multiplying
+five rotations of $\pi$ is not the same operation as averaging them
+with weights summing to one. The complex model has the right algebra
+embedded in its weights but cannot use it through the attention
+mechanism.
+
+
+\section{Experiment 2: Recurrent Architectures on $\Z/2$}
+\label{sec:exp2}
+
+\paragraph{Setup.} Train three architectures whose composition is
+multiplicative by construction: \textsc{PhaseSumNet} ($d=16$, $\sim$273
+params), \textsc{GatedComplexRNN} ($d=24$, $\sim$3{,}000 params), and a
+parameter-matched GRU baseline ($\sim$3{,}000 params). Train depths
+$k \in \{0,\ldots,3\}$, eval to $k=15$. 5 seeds.
+
+\paragraph{Results.}
+
+\begin{table}[h]
+\centering
+\caption{Experiment 2: 5-seed averages on $\Z/2$.}
+\label{tab:exp2-results}
+\begin{tabular}{lccc}
+\toprule
+Model & Params & ID acc & OOD acc \\
+\midrule
+\textsc{PhaseSumNet}     & 273   & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+\textsc{GatedComplexRNN} & 4{,}033 & $1.000 \pm 0.000$ & $0.999 \pm 0.000$ \\
+\textsc{GRU}             & 3{,}962 & $1.000 \pm 0.000$ & $0.999 \pm 0.000$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Interpretation.} All three multiplicative architectures
+generalize essentially perfectly to OOD depth 15---5$\times$ the
+training distribution---using fewer than 4{,}000 parameters, while
+the 303{,}000-parameter complex transformer of Experiment 1 sat at
+chance. The structural prior is doing two-to-three orders of magnitude
+more work than parameter count.
+
+A subtle point: \textsc{PhaseSumNet}'s phase probe is messy. Across
+seeds, the mean $\cos\theta(\mathrm{NOT})$ is $-0.11$ (target $-1$),
+and only 24\% of phase dimensions land within $\pi/8$ of $\pm\pi$.
+The model does not converge to the textbook optimum. But it does not
+need to: with $d=16$ phase dimensions feeding a linear readout, the
+readout learns to combine the few well-placed dimensions and ignore
+the rest. \textsc{PhaseSumNet}'s OOD accuracy is exactly 1.000
+nonetheless, with zero variance across seeds.
+
+This experiment establishes that the inductive bias from
+\emph{multiplicative composition} (not specifically complex numbers)
+solves $\Z/2$. The real-valued GRU achieves the same OOD accuracy as
+the complex models. To separate "multiplicative composition" from
+"complex numbers" we need a group whose representation in $\R^*$
+is not native. That is the next experiment.
+
+
+\section{Experiment 3: $\Z/3$ as a Separating Task}
+\label{sec:exp3}
+
+\paragraph{Why $\Z/3$.} The multiplicative group $\R^*$ contains
+$\Z/2 = \{+1, -1\}$ as a subgroup but \emph{not} $\Z/3$. There is
+no order-3 element in $\R^*$ under multiplication. To represent
+$\Z/3$ in a network, one must either (a) use 2D rotations
+(equivalently, $\C$ on the unit circle), (b) use multi-state gating
+that simulates a 3-state automaton, or (c) use a non-additive
+composition operator. Pure additive-linear architectures are
+provably barred by \Cref{thm:additive-barred}.
+
+\paragraph{Setup.} Architectures: \textsc{PhaseSumNet3} (the $n=3$
+version of \textsc{PhaseSumNet}), \textsc{RealAddNet} (the negative
+control of \Cref{thm:additive-barred}), \textsc{GatedComplexRNN3}, and
+\textsc{GRU3}. Train depths 0--5, eval 0--20, 5 seeds.
+
+\paragraph{Results.}
+
+\begin{table}[h]
+\centering
+\caption{Experiment 3: 5-seed averages on $\Z/3$. Chance is $1/3$.}
+\label{tab:exp3-results}
+\begin{tabular}{lcccc}
+\toprule
+Model & Params & ID acc & OOD acc (6--20) & Closure under 3$\cdot\tau$ \\
+\midrule
+\textsc{PhaseSumNet3}     & 355    & $1.000 \pm 0.000$ & $\mathbf{1.000 \pm 0.000}$ & 1.000 \\
+\textsc{RealAddNet}       & 611    & $\mathbf{0.336 \pm 0.020}$ & $\mathbf{0.341 \pm 0.008}$ & --- \\
+\textsc{GatedComplexRNN3} & 4{,}547  & $1.000 \pm 0.000$ & $0.987 \pm 0.006$ & 1.000 \\
+\textsc{GRU3}             & 4{,}503  & $1.000 \pm 0.000$ & $0.999 \pm 0.001$ & 0.953 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Interpretation.}
+
+\textbf{\Cref{thm:additive-barred} is empirically tight.}
+\textsc{RealAddNet} sits at exactly chance (1/3) on both ID
+\emph{and} OOD. The architecture is incapable of fitting even the
+training distribution, in confirmation of the proof: linear-in-$k$
+logits cannot represent $(c+k) \bmod 3$ at any depth. We verify by
+inspecting the learned readout: the per-class slopes
+$\beta_j = W_{j,:} e(\tau)$ have spread $0.020 \pm 0.005$ across
+seeds, near zero---the model has correctly identified that no
+consistent linear function of $k$ predicts the label and converged
+to uniform output.
+
+\textbf{Multiplicative architectures all generalize.}
+\textsc{PhaseSumNet3} at 355 parameters reaches OOD 1.000 with zero
+variance. \textsc{GatedComplexRNN3} and \textsc{GRU3} reach 0.987
+and 0.999 respectively. The GRU's slight edge at extreme OOD
+depths (18--20) is interesting and we return to it in
+\Cref{sec:exp4}.
+
+This experiment establishes that the relevant axis is
+\emph{multiplicative vs.\ additive composition}, with the negative
+side of the axis provably barred and the positive side generically
+successful at $\Z/3$. We have not yet separated complex from real
+within the multiplicative class. That is Experiment 4.
+
+
+\section{Experiment 4: Scaling Sweep over Group Order $n$}
+\label{sec:exp4}
+
+\paragraph{Setup.} Sweep $n \in \{2, 3, 5, 7, 11, 13\}$. For each
+$n$, train all four multiplicative-class architectures plus the
+\textsc{RealAddNet} negative control. Train depths 0--5, eval 0--20,
+3 seeds per cell. Total: 72 training runs.
+
+\paragraph{Results.} \Cref{tab:exp4-results} summarizes by giving
+OOD accuracy as a function of $n$. The full per-depth breakdown is
+in the project repository.
+
+\begin{table}[h]
+\centering
+\caption{Experiment 4: OOD accuracy (mean of 3 seeds) on $\Z/n$ for
+each $n$. Bold = near-perfect; underline = collapse to chance.}
+\label{tab:exp4-results}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+Model & $n=2$ & $n=3$ & $n=5$ & $n=7$ & $n=11$ & $n=13$ \\
+\midrule
+\textsc{PhaseSumNet} & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ \\
+\textsc{RealAddNet} & $0.505$ & $\underline{0.341}$ & $\underline{0.200}$ & $\underline{0.136}$ & $\underline{0.069}$ & $\underline{0.070}$ \\
+\textsc{GatedComplexRNN} & $0.967$ & $0.979$ & $0.992$ & $0.980$ & $0.816$ & $0.864$ \\
+\textsc{GRU} & $\mathbf{1.000}$ & $0.991$ & $\underline{0.248}$ & $\underline{0.241}$ & $\underline{0.285}$ & $\underline{0.237}$ \\
+\midrule
+Chance $1/n$ & $0.500$ & $0.333$ & $0.200$ & $0.143$ & $0.091$ & $0.077$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Interpretation.}
+
+\textbf{\textsc{PhaseSumNet} is exact across $n$.} OOD accuracy
+$1.000 \pm 0.000$ at every $n$ tested, with 306--845 parameters.
+The architectural symmetry match holds across an order of magnitude
+in group order. This is the strongest single result of the paper.
+
+\textbf{\textsc{RealAddNet} matches the theorem's chance prediction.}
+For $n \geq 3$, OOD accuracy is statistically indistinguishable from
+$1/n$. The exception at $n=2$ (OOD $0.505 \approx$ chance for $\Z/2$)
+is informative: at $n=2$ the theorem does not apply (two linear
+functions can change ranking, $n-1=1$ time), but the model still
+converged to chance. This is a learning failure---an architecture
+not theoretically barred can still fail to find a workable
+solution.
+
+\textbf{\textsc{GatedComplexRNN} declines gracefully with $n$.}
+OOD ranges from 0.967 at $n=2$ to 0.816 at $n=11$, with a clear
+break-point around $n \approx 8$. The mechanism is that the
+architecture's angular margin between adjacent classes is $2\pi/n$,
+which shrinks as $n$ grows, while the additive value contribution
+$v(\tau)$ lets state magnitude drift slightly with sequence length;
+the ratio of drift to margin determines the break.
+
+\textbf{\textsc{GRU} shows a phase transition, not a scaling decline.}
+GRU goes from $1.000$ at $n=2$ and $0.991$ at $n=3$ to $\sim$0.25 at
+$n \geq 5$ across every tested $n$, with ID accuracy still
+$\sim$1.000 throughout. The architecture fits the training set
+perfectly at every $n$ but generalizes only for $n \in \{2, 3\}$.
+This is not a gradual loss of capacity; it is a binary
+representability transition we need to investigate further.
+
+We address the GRU's $n \geq 5$ collapse via a capacity sweep in
+Experiment 5 and a trajectory analysis in \Cref{sec:mechanism}.
+
+
+\section{Experiment 5: Capacity Sweep on the GRU Collapse}
+\label{sec:exp5}
+
+\paragraph{Question.} Is the GRU's $\Z/n_{\geq 5}$ collapse a
+\emph{structural barrier} (real-valued gating cannot represent the
+group at any capacity) or merely \emph{sample-inefficient} (more
+parameters or training would close the gap)?
+
+\paragraph{Setup.} Hold $n=5$ and $n=7$ fixed. Sweep
+$(d_{\text{model}}, n_\text{layers}) \in \{(16,1), (32,1), (32,2),
+(64,1), (64,2), (128,1), (128,2), (256,1)\}$, giving an 8-cell
+capacity ladder from $\sim$4k to $\sim$1.06M parameters. Include
+\textsc{LSTM} as a control with the same gating-family ancestry but
+different gate equations. Compare to \textsc{PhaseSumNet} at matched
+$d$ values. Train 120{,}000 samples for 25 epochs at $\mathrm{lr} =
+3 \times 10^{-3}$, batch size 256, 3 seeds per cell. Total: 126
+runs.
+
+\paragraph{Results for $\Z/5$.} OOD accuracy summary
+(\Cref{tab:exp5-z5}):
+
+\begin{table}[h]
+\centering
+\caption{Experiment 5, $\Z/5$: OOD accuracy across capacity. All
+GRU/LSTM cells sit at or below 0.34; \textsc{PhaseSumNet} is exactly
+$1.000$ at every cell.}
+\label{tab:exp5-z5}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{l@{\hskip 8pt}rcccc}
+\toprule
+Model & Params & $d=16,L=1$ & $d=64,L=1$ & $d=128,L=2$ & $d=256,L=1$ \\
+\midrule
+GRU              & 3.7k--797k   & $0.285$ & $0.247$ & $0.266$ & $0.240$ \\
+LSTM             & 4.8k--1.06M  & $0.288$ & $0.261$ & $0.290$ & $0.251$ \\
+\textsc{PhaseSumNet} & 453--7.2k & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ & $\mathbf{1.000}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Across 16 GRU+LSTM cells from 3{,}717 to 1{,}059{,}845 parameters
+(285$\times$ capacity range), OOD on $\Z/5$ stays in the band
+$[0.22, 0.34]$. ID is $1.000 \pm 0.000$ in every cell. The
+GRU/LSTM architectures fit the training set perfectly at every scale
+and produce near-noise OOD predictions.
+
+\paragraph{Results for $\Z/7$.} 1-layer GRU and all LSTM stay at
+chance. But 2-layer GRU climbs with capacity:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Configuration & Params & OOD acc \\
+\midrule
+GRU $d=32, L=2$  & 32k  & $0.402 \pm 0.041$ \\
+GRU $d=64, L=2$  & 127k & $0.564 \pm 0.079$ \\
+GRU $d=128, L=2$ & 499k & $0.787 \pm 0.094$ \\
+\textsc{PhaseSumNet} & 551--8{,}711 & $\mathbf{1.000 \pm 0.000}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 2-layer GRU at $d=128$ reaches 78.7\% on $\Z/7$ with 499k
+parameters, partially escaping the barrier. Single-layer GRU and
+all LSTM at the same scale stay at chance. PhaseSumNet at 551
+parameters hits $1.000$.
+
+\paragraph{Interpretation.}
+
+\textbf{The $\Z/5$ barrier is sharp.} 285$\times$ capacity range,
+two architecture families, two depths each, three seeds each, total
+48 runs, none above 0.34 OOD. This establishes as well as a
+synthetic-task experiment can establish that real-valued gated
+recurrence does not solve $\Z/5$ at any capacity tested within 25
+epochs.
+
+\textbf{LSTM ties the GRU result.} The structural failure is not
+GRU-specific. Whatever mechanism prevents $\Z/5$ representation
+acts in both LSTM and GRU. Possibilities: (a) both architectures
+share the $\tanh$-bounded state space; (b) both architectures share
+sigmoid gates; (c) both architectures share a per-step linear
+contribution from input embeddings. \Cref{sec:mechanism} provides
+evidence that the bounded state is the key.
+
+\textbf{The 2-layer $\Z/7$ result is unresolved.} The climb 0.40
+$\to$ 0.56 $\to$ 0.79 with capacity at 2-layer is reproducible
+across the three seeds (stderr 0.04--0.09). It is specifically
+2-layer GRU, specifically $\Z/7$. We hypothesize and partially
+confirm in \Cref{sec:mechanism} that the second layer permits a
+late-training phase transition---grokking---during which the
+architecture discovers an approximately group-respecting state
+trajectory.
+
+
+\section{Mechanism Analysis: State Trajectories}
+\label{sec:mechanism}
+
+The capacity sweep established the existence of the $\Z/5$ barrier
+and the $\Z/7$ partial escape. This section identifies what is
+happening inside the architectures by direct measurement of state
+and logit dynamics.
+
+\subsection{Methodology}
+
+For a trained model, we build paired probe sequences differing only
+in the number of trailing rotation tokens, with the base prefix
+(\texttt{CLS}, atom, fillers) held identical across $k$. Across
+$k = 0, 1, \ldots, 30$, we measure:
+\begin{enumerate}[itemsep=2pt]
+\item State magnitude $\|h(k)\|$.
+\item State modular return: $\|h(k+n) - h(k)\|$ (per fixed base
+sequence).
+\item Logit modular return: $\|\ell(k+n) - \ell(k)\|$.
+\item \textbf{Argmax invariance}: the fraction of probe sequences
+satisfying $\argmax \ell(k+n) = \argmax \ell(k)$.
+\end{enumerate}
+
+Argmax invariance directly measures the property required for OOD
+generalization: predictions should be invariant under adding $n$
+rotation tokens, since $(c + k + n) \bmod n = (c + k) \bmod n$.
+
+\subsection{The GRU Failure on $\Z/5$}
+
+Train a 1-layer GRU at $d=64$ on $\Z/5$ (same configuration as the
+$d=64, L=1$ cell of \Cref{tab:exp5-z5}) and run the probe.
+\Cref{tab:trajectory-z5} summarizes.
+
+\begin{table}[h]
+\centering
+\caption{Trajectory diagnostics on $\Z/5$. The two architectures are
+trained with the same task, training depths, and number of epochs.}
+\label{tab:trajectory-z5}
+\begin{tabular}{lcc}
+\toprule
+& GRU $d=64$ & \textsc{PhaseSumNet} $d=16$ \\
+\midrule
+OOD accuracy ($k>5$) & $0.23$ & $\mathbf{1.000}$ \\
+State magnitude at $k>5$ & $6.75$ & $4.00$ \\
+Magnitude ratio $\|h(30)\|/\|h(5)\|$ & $1.19$ & $1.00$ \\
+State $\|\Delta\| / \|h\|$ (relative) & $0.17$ & $0.98$ \\
+Logit $\|\Delta\|$ & $9.87$ & $0.46$ \\
+Argmax invariance under $5\cdot\tau$ & $0.54$ & $\mathbf{1.000}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{State-level closure is misleading.} The GRU's relative state
+movement under $5\cdot\tau$ is only $0.17$ (state changes by 17\%
+of its magnitude), while \textsc{PhaseSumNet}'s is $0.98$ (state
+changes by nearly its full magnitude). On state closure alone the
+GRU looks better. But its argmax invariance is $0.54$ and
+\textsc{PhaseSumNet}'s is $1.00$.
+
+The resolution is that the readout-relevant quantity is logits, not
+states. \textsc{PhaseSumNet}'s state lives on the unit circle in
+$\R^{2d}$, and the readout's null space (under addition of
+$n \cdot \theta(\tau) \equiv 0 \pmod{2\pi}$) is exactly the
+direction of state motion. State moves; logits don't. The GRU's
+state geometry has no such alignment: small state shifts get
+amplified by the linear readout into 22$\times$ larger logit
+shifts ($9.87$ vs $0.46$).
+
+\textbf{The per-$k$ pattern reveals the failure mode.}
+\Cref{tab:gru-perk} shows the GRU's argmax invariance at each $k$.
+
+\begin{table}[h]
+\centering
+\caption{Per-$k$ argmax invariance under $5\cdot\tau$ for the
+$\Z/5$ GRU.}
+\label{tab:gru-perk}
+\begin{tabular}{lc|lc}
+\toprule
+$k$ & invariance & $k$ & invariance \\
+\midrule
+0   & $0.83$ & 12--15 & $0.50$--$0.61$ \\
+1   & $0.63$ & 16--19 & $0.67$--$0.80$ \\
+2   & $0.28$ & 20--25 & $0.85$--$0.98$ \\
+3--7 & $\mathbf{0.00}$ & & \\
+8--11 & $0.38$ & & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Invariance is high near the training boundary ($k=0, 1$),
+catastrophically zero in the transition zone ($k=3$--$7$), and
+recovers at large $k$. The recovery is misleading: at $k=20$--$25$
+the GRU's state magnitude has saturated against the $\tanh$ ceiling
+($\|h\|$ grows from 5.12 at $k=0$ to 7.04 at $k=30$ and asymptotes),
+and the logits become a near-constant function of $k$ (logit
+$\|\Delta\|$ falls from 24.96 at $k=5$ to 2.05 at $k=20$). The
+prediction is constant in $k$, not group-respecting.
+
+This is the unified mechanism for the $\Z/5$ failure: \emph{the
+state saturates against the $\tanh$ ceiling past the training depth,
+making the readout a near-constant function of $k$, which is right
+$1/n$ of the time}. No amount of capacity within the tested range
+escapes this, because the boundedness is a property of the
+activation, not the layer width.
+
+\subsection{The $\Z/7$ Grokking Phenomenon}
+
+We applied the same trajectory diagnostics to the 2-layer GRU at
+$d=128$ on $\Z/7$ (the partial-escape cell). One seed of this
+configuration was run with the same hyperparameters as Experiment 5
+(120k samples, 25 epochs, $\mathrm{lr}=3\times 10^{-3}$). The
+training trajectory is shown in \Cref{tab:grokking-trajectory}.
+
+\begin{table}[h]
+\centering
+\caption{Training trajectory for 2-layer GRU $d=128$ on $\Z/7$.
+Training loss reaches zero at step 2000 and stays there. OOD
+accuracy sits at $\sim 0.70$ for 4000 more steps, then jumps at
+step 6000.}
+\label{tab:grokking-trajectory}
+\begin{tabular}{ccc}
+\toprule
+Step & Train loss & OOD acc \\
+\midrule
+500   & 0.0005 & $0.632$ \\
+2000  & 0.0001 & $0.702$ \\
+5500  & 0.0000 & $0.710$ \\
+\textbf{6000} & \textbf{0.0005} & $\mathbf{0.940}$ \\
+8000  & 0.0000 & $\mathbf{0.947}$ \\
+11700 & 0.0000 & $0.947$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The pattern of (i) training loss converging to zero, (ii) OOD
+plateauing for an extended period, then (iii) abrupt OOD
+improvement, is the standard signature of grokking
+\citep{power2022grokking}. At step 6000, with the model having been
+at zero loss for $\sim$4000 steps, OOD jumps from 0.71 to 0.94. The
+brief loss spike at the same step is consistent with the
+optimization stepping into a qualitatively different basin.
+
+The trajectory diagnostics on the grokked model are striking
+(\Cref{tab:grokked-vs-failing}).
+
+\begin{table}[h]
+\centering
+\caption{Trajectory diagnostics on $\Z/7$ for the grokked 2-layer
+GRU, compared to the failing baseline ($\Z/5$ 1-layer GRU) and the
+success reference (\textsc{PhaseSumNet} on $\Z/7$).}
+\label{tab:grokked-vs-failing}
+\begin{tabular}{lccc}
+\toprule
+& 1-layer GRU $\Z/5$ (fails) & \textbf{2-layer GRU $\Z/7$ (grokked)} & \textsc{PhaseSumNet} $\Z/7$ (succeeds) \\
+\midrule
+OOD accuracy & $0.23$ & $\mathbf{0.947}$ & $1.000$ \\
+Magnitude ratio (30 / 5) & $1.19$ & $\mathbf{1.02}$ & $1.00$ \\
+State $\|\Delta\|$ relative & $0.13$ & $0.17$ & $0.98$ \\
+Logit $\|\Delta\|$ & $9.87$ & $\mathbf{3.30}$ & $0.46$ \\
+Argmax invariance & $0.58$ & $\mathbf{0.86}$ & $1.00$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The grokked GRU has stopped saturating.} Magnitude ratio
+drops from $1.19$ (failing) to $1.02$ (grokked); state magnitude is
+nearly constant across $k$. The model has found an
+approximately-periodic state trajectory that bypasses the $\tanh$
+ceiling.
+
+\textbf{The grokked GRU has partially aligned its readout.} Logit
+$\|\Delta\|$ falls 3$\times$ (from 9.87 to 3.30); argmax invariance
+climbs from 0.58 to 0.86. The model has moved most of the way from
+the failing baseline to the unit-circle success.
+
+\subsection{What Grokking Found, and What It Did Not}
+
+We interpret the grokked GRU as having discovered, via late-training
+optimization, an approximate version of what \textsc{PhaseSumNet}
+implements by construction: a bounded state trajectory along
+directions the readout partially ignores modulo $n$. Three pieces
+of evidence support this reading:
+
+\begin{enumerate}[itemsep=2pt]
+\item The magnitude ratio is essentially identical to
+\textsc{PhaseSumNet}'s ($1.02$ vs $1.00$): the state has become
+effectively bounded.
+\item Logit $\|\Delta\|$ has dropped by a factor of 3, indicating
+the readout has lost most of its amplification of state shifts.
+\item The phase transition occurs at step 6000---4000 steps after
+training loss has converged---which is the signature of slow
+discovery of a structured solution, not faster convergence.
+\end{enumerate}
+
+The grokked solution is not exact: argmax invariance is $0.86$ vs
+\textsc{PhaseSumNet}'s $1.00$, and OOD is $0.947$ vs $1.000$. The
+GRU has \emph{approximately} discovered Z/7 representation, not
+exactly. We hypothesize that with longer training or larger
+capacity it might approach 1.000, but at substantial parameter and
+training cost relative to \textsc{PhaseSumNet}'s 551 parameters
+reaching 1.000 by step 1000.
+
+\subsection{Implications for the $\Z/5$ Claim}
+
+Does the $\Z/7$ grokking finding undermine the $\Z/5$ structural
+claim? We believe not, because:
+
+\begin{itemize}[itemsep=2pt]
+\item In 48 $\Z/5$ runs spanning a 285$\times$ capacity range, three
+seeds each, no run shows the late-training jump characteristic of
+grokking. All saturate within $\sim$1500 steps and remain at the
+chance plateau.
+\item The diagnostic signature of saturation (monotonically growing
+$\|h\|$, constant argmax at large $k$) is present in every $\Z/5$
+GRU we examined and absent in the grokked $\Z/7$ model.
+\end{itemize}
+
+The most defensible version of the structural claim is therefore:
+\emph{within practical training budgets, real-valued gated
+recurrence does not learn to represent $\Z/n$ for $n \geq 5$
+reliably. At $n = 7$ with two layers and large width, a fraction of
+training runs grok to an approximate representation late in training,
+producing the partial escape observed in \Cref{tab:exp4-results}.
+Whether $\Z/5$ admits grokking at sufficiently long training or
+larger capacity is open}.
+
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{What We Can Claim}
+
+\begin{enumerate}[itemsep=2pt]
+\item \textbf{Additive-linear architectures cannot represent
+$\Z/n$ for $n \geq 3$.} Provable
+(\Cref{thm:additive-barred}), confirmed empirically across $n =
+3, 5, 7, 11, 13$ at accuracy exactly $1/n$.
+
+\item \textbf{Softmax attention is additive composition.} The
+complex transformer in Experiment 1 learns the algebra
+($|\Delta| = 2.43$ radians, target $\pi$) but cannot compose it.
+This is consistent with \citet{hahn2020theoretical} and the
+formal-language literature.
+
+\item \textbf{The unit circle in $\C$ admits a faithful
+representation of every $\Z/n$ in one dimension.}
+\textsc{PhaseSumNet} reaches OOD $1.000 \pm 0.000$ at every $n$ we
+tested, with 306--845 parameters.
+
+\item \textbf{Bounded real-valued gated recurrence does not solve
+$\Z/n$ for $n \geq 5$ within practical training budgets.} 285$\times$
+capacity sweep, two architecture families, three seeds, all at
+$\leq 0.34$ OOD. The mechanism is state saturation against the
+$\tanh$ ceiling.
+
+\item \textbf{Grokking can partially leak the barrier on $\Z/7$.}
+With 2-layer GRU at $d=128$, a late-training phase transition
+sometimes produces an approximate Z/7 representation (OOD $\sim$0.95).
+The grokked model has stopped saturating---a structurally distinct
+regime from the failing baseline.
+
+\item \textbf{The qualitative separation is between architectures
+matching the symmetry by construction and those discovering it
+through optimization}, including potentially via grokking. The
+former generalize predictably with $O(n)$ parameters; the latter
+require orders of magnitude more parameters and may not always
+discover the structure within standard training budgets.
+\end{enumerate}
+
+\subsection{What We Cannot Yet Claim}
+
+\begin{enumerate}[itemsep=2pt]
+\item Whether $\Z/5$ admits grokking with $\gg$25 epochs of training
+or $\gg$1M parameters. The signature is absent in our 48 cells but
+the test is finite.
+
+\item Whether the saturation mechanism is causally responsible for
+the $\Z/5$ failure. The clean test is to replace the $\tanh$-bounded
+RNN with an unbounded normalized one; the prediction is that the
+saturation pattern should disappear and OOD should change. We have
+not run this experiment.
+
+\item Whether the n=7 grokking phenomenon scales to $n \in \{11, 13\}$
+at sufficient capacity. Experiment 4 measured 2-layer GRU at small
+$d$ on these and saw chance; we have not retested at $d \in \{128,
+256\}$.
+
+\item Anything about real-language negation. Our experiments use
+controlled cyclic-rotation tasks. Real-language phenomena are
+governed by the cyclic structure of negation but also by scope,
+modality, sarcasm, and idiomatic constructions that we do not model.
+\end{enumerate}
+
+\subsection{Implications for Practitioners}
+
+The findings suggest a design heuristic. For any task whose
+underlying structure can be identified with a known group (cyclic
+groups for parity-like tasks; $\mathrm{SO}(3)$ for 3D pose;
+$\mathrm{SE}(3)$ for rigid body motion; permutations for set
+processing), an architecture whose state geometry contains a
+faithful representation of that group should be preferred over a
+generic architecture. The cost in expressiveness from constraining
+the state geometry is offset by orders-of-magnitude better sample
+efficiency, deterministic generalization properties, and the absence
+of late-training phase transitions.
+
+For cyclic-group structure specifically: complex unit-circle
+representations are the minimal sufficient construction. Real-valued
+gated recurrences are insufficient for $n \geq 5$ within practical
+training budgets; transformers with softmax attention are insufficient
+at any $n$.
+
+\subsection{Connection to Existing Theory}
+
+Our negative result for softmax attention
+(\Cref{cor:attention-cant-multiply}) is a special case of
+\citet{hahn2020theoretical}'s impossibility result for parity in
+transformer self-attention. We extend it to general cyclic groups.
+
+Our positive result for unit-circle architectures relates to the
+broader literature on group-equivariant networks
+\citep{cohen2016group}. The novelty in our setting is the
+\emph{minimality} of the construction: the same algebraic structure
+that motivates large-scale group-equivariant CNNs for image data is
+sufficient to solve a sequence task with 300--800 parameters.
+
+The grokking finding for the $\Z/7$ 2-layer GRU is consistent with
+the broader grokking literature in suggesting that overparameterized
+models can discover structured solutions late in training. We
+believe the cleanness of the cyclic-group setting may make it a
+useful benchmark for mechanistic studies of grokking.
+
+
+\section{Limitations}
+\label{sec:limitations}
+
+\begin{enumerate}[itemsep=2pt]
+\item \textbf{Synthetic task family.} All experiments are on
+controlled cyclic-group rotation tasks. Real-world phenomena with
+cyclic structure (musical pitch, days of week, cardinal directions,
+negation in natural language) are noisier and partially observable.
+
+\item \textbf{Limited cyclic-group orders.} We test $n \leq 13$.
+Whether the pattern holds for $n = 100$ or $n = 1000$ is unknown.
+
+\item \textbf{Three seeds in the capacity sweep.} The 2-layer GRU
+on $\Z/7$ grokking happens in roughly one seed out of three at the
+$d=128$ scale; a 10-seed rerun would tighten the variance.
+
+\item \textbf{Single architecture per category.} We test one complex
+transformer, one GRU, one LSTM. There are many transformer variants
+(\citet{su2024roformer}'s RoPE, ALiBi, etc.) we have not tested.
+
+\item \textbf{Limited mechanism analysis.} The trajectory diagnostics
+focus on state and logit dynamics in the last position. A finer
+analysis (per-position state evolution, gate values, etc.) would
+better characterize what the gated models do and do not internalize.
+\end{enumerate}
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have studied cyclic-group composition tasks as a controlled
+benchmark for architectural inductive bias. Combining a formal
+proof that additive-linear architectures cannot represent
+$\Z/n$ for $n \geq 3$, an empirical demonstration that softmax
+transformers fall into the additive class, a positive existence
+result for a 300-parameter unit-circle architecture that
+generalizes across $n \in \{2, 3, 5, 7, 11, 13\}$, and a mechanistic
+analysis of where the real-valued gated baselines fail, we arrive at
+the following synthesis:
+
+Architectures whose composition operator is a group homomorphism
+into a state space containing the task's symmetry group generalize
+on cyclic-group tasks predictably and with $O(n)$ parameters.
+Architectures whose composition operator is additive or whose state
+saturates do not, regardless of capacity. Between these extremes
+sits a regime---two-layer GRU at large width on $\Z/7$---where the
+architecture can in principle discover the group structure but
+must do so through a late-training phase transition (grokking) that
+is unreliable and parameter-expensive. The qualitative split
+between \emph{architectural match by construction} and
+\emph{discovery through optimization} appears to be the central
+distinction.
+
+We hope the framework---cyclic-group tasks as a graded diagnostic,
+trajectory diagnostics as a mechanistic probe, and the structural
+vs.\ grokked vs.\ constructed taxonomy---is useful for future work
+on architectural inductive bias.
+
+
+\paragraph{Code and data.} All code, training logs, and per-seed
+results are available at
+\url{https://github.com/Minds-R-Lab/ComplexAttn}.
+
+
+\small
+\bibliographystyle{abbrvnat}
+
+\begin{thebibliography}{20}
+
+\bibitem[Anil et~al.(2022)]{anil2022exploring}
+Anil, C., Wu, Y., Andreassen, A., Lewkowycz, A., Misra, V., Ramasesh, V., Slone, A., Gur-Ari, G., Dyer, E., and Neyshabur, B.
+\newblock Exploring length generalization in large language models.
+\newblock \emph{NeurIPS}, 2022.
+
+\bibitem[Arjovsky et~al.(2016)]{arjovsky2016unitary}
+Arjovsky, M., Shah, A., and Bengio, Y.
+\newblock Unitary evolution recurrent neural networks.
+\newblock \emph{ICML}, 2016.
+
+\bibitem[Bhattamishra et~al.(2020)]{bhattamishra2020ability}
+Bhattamishra, S., Ahuja, K., and Goyal, N.
+\newblock On the ability and limitations of transformers to recognize formal languages.
+\newblock \emph{EMNLP}, 2020.
+
+\bibitem[Cohen and Welling(2016)]{cohen2016group}
+Cohen, T.~S. and Welling, M.
+\newblock Group equivariant convolutional networks.
+\newblock \emph{ICML}, 2016.
+
+\bibitem[Hahn(2020)]{hahn2020theoretical}
+Hahn, M.
+\newblock Theoretical limitations of self-attention in neural sequence models.
+\newblock \emph{TACL}, 8:156--171, 2020.
+
+\bibitem[Jelassi et~al.(2024)]{jelassi2024repeat}
+Jelassi, S., d'Ascoli, S., Domingo-Enrich, C., Wu, Y., Li, Y., and Charton, F.
+\newblock Length generalization in arithmetic transformers.
+\newblock \emph{arXiv:2306.15400}, 2024.
+
+\bibitem[Liu et~al.(2022)]{liu2022omnigrok}
+Liu, Z., Michaud, E.~J., and Tegmark, M.
+\newblock Omnigrok: Grokking beyond algorithmic data.
+\newblock \emph{arXiv:2210.01117}, 2022.
+
+\bibitem[Nanda et~al.(2023)]{nanda2023progress}
+Nanda, N., Chan, L., Lieberum, T., Smith, J., and Steinhardt, J.
+\newblock Progress measures for grokking via mechanistic interpretability.
+\newblock \emph{ICLR}, 2023.
+
+\bibitem[Power et~al.(2022)]{power2022grokking}
+Power, A., Burda, Y., Edwards, H., Babuschkin, I., and Misra, V.
+\newblock Grokking: Generalization beyond overfitting on small algorithmic datasets.
+\newblock \emph{arXiv:2201.02177}, 2022.
+
+\bibitem[Sordoni et~al.(2013)]{sordoni2013modeling}
+Sordoni, A., Bengio, Y., and Nie, J.-Y.
+\newblock Modeling term dependencies with quantum language models for IR.
+\newblock \emph{SIGIR}, 2013.
+
+\bibitem[Su et~al.(2024)]{su2024roformer}
+Su, J., Lu, Y., Pan, S., Murtadha, A., Wen, B., and Liu, Y.
+\newblock Roformer: Enhanced transformer with rotary position embedding.
+\newblock \emph{Neurocomputing}, 568, 2024.
+
+\bibitem[Trabelsi et~al.(2018)]{trabelsi2018deep}
+Trabelsi, C., Bilaniuk, O., Zhang, Y., Serdyuk, D., Subramanian, S., Santos, J.~F., Mehri, S., Rostamzadeh, N., Bengio, Y., and Pal, C.~J.
+\newblock Deep complex networks.
+\newblock \emph{ICLR}, 2018.
+
+\bibitem[Zhou et~al.(2023)]{zhou2023algorithms}
+Zhou, H., Bradley, A., Littwin, E., Razin, N., Saremi, O., Susskind, J., Bengio, S., and Nakkiran, P.
+\newblock What algorithms can transformers learn? A study in length generalization.
+\newblock \emph{arXiv:2310.16028}, 2023.
+
+\end{thebibliography}
+
+\end{document}
