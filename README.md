@@ -62,21 +62,23 @@ home** for tasks whose symmetry group is cyclic of order ≥ 5. For Z/2
 and Z/3, real-valued gated recurrence handles the task fine via
 fixed-point and three-fold attractors in tanh-state space. For Z/5,
 real-valued gating collapses across 16 architecture-capacity cells from
-4k to 1M parameters — the strongest possible synthetic-task evidence
-for a structural barrier. For Z/7, the barrier holds for single-layer
-GRU and for LSTM at any depth, but 2-layer GRU partially escapes at
-large capacity (78.7% OOD at d=128, L=2), via a mechanism I can't
-cleanly identify. Across every n we tested, PhaseSumNet at the
-unit-circle hits 1.000 OOD with 306–8,711 parameters: two to three
+4k to 1M parameters. The mechanism is not that "tanh can't make limit
+cycles of period 5" — it's subtler: the GRU's tanh-bounded state
+*saturates* past the training depth, and once saturated the linear
+readout becomes a near-constant function of k. OOD accuracy plateaus
+at exactly 1/n, the chance value for any constant prediction over n
+balanced classes. **No amount of capacity rescues this**, because the
+failure is in the boundedness of the state, not its dimension.
+PhaseSumNet succeeds for the inverse reason: its `[cos(Θ), sin(Θ)]`
+state is *constructed* so the readout-relevant subspace is invariant
+under the TWIRL action by design. State moves a lot in absolute terms;
+logits don't move at all. Across every n we tested, PhaseSumNet at
+the unit circle hits 1.000 OOD with 306–8,711 parameters: two to three
 orders of magnitude smaller than the next-best architecture, and the
 only one that solves the task exactly. The deepest prerequisite is
-more general: the architecture's composition operator must be a
-homomorphism into a state space that contains closed orbits of the
-task's period. Softmax attention isn't (it forces additive
-composition); RealAddNet's linear readout isn't (logits linear in token
-count can't be periodic); real-gated recurrence is reliable only for
-n ∈ {2, 3} with isolated escape routes that we don't yet understand;
-complex unit-circle architectures are reliable for every n.
+**alignment between state geometry and readout**: the architecture's
+composition operator must move state along directions the readout
+ignores, modulo the task's period.
 
 ---
 
@@ -590,6 +592,123 @@ PhaseSumNet that hits 1.000 on the same task.
 
 ---
 
+## Mechanism — why does the GRU fail and PhaseSumNet succeed?
+
+After Exp 5 confirmed the barrier at n=5, the question is *what*, in
+the GRU's dynamics, prevents it from representing Z/5 — and in what
+sense PhaseSumNet's representation *is* Z/5. `trajectory_analysis.py`
+trains one GRU (d=64, L=1) and one PhaseSumNet (d=16) on Z/5, then
+probes their state and logit dynamics across `k = 0…30` TWIRLs on
+sequences with identical base prefixes (so the only difference between
+`k` and `k+5` is exactly 5 TWIRL tokens).
+
+### The four diagnostics, and why the first three mislead
+
+| metric | GRU | PhaseSumNet | which generalizes? |
+|---|--:|--:|---|
+| state magnitude at k>5 | 6.75 | 4.00 | — |
+| magnitude ratio ‖h(30)‖/‖h(5)‖ | 1.19 | 1.00 | — |
+| state ‖Δ‖ / ‖h‖ after 5·TWIRL | **0.17** | **0.98** | — |
+| **argmax invariance after 5·TWIRL** | **0.54** | **1.00** | **PhaseSumNet** |
+
+The state-level "closure" metric is misleading in the direction I
+initially expected to be most informative. The GRU's state moves only
+17% (relative) after 5 TWIRLs; PhaseSumNet's moves 98%. If you read
+only state closure, you'd conclude the GRU has "almost-perfect cyclic
+structure" and PhaseSumNet has "no cyclic structure". The opposite is
+true.
+
+The resolution is that **state-level closure is the wrong question.**
+What the linear readout sees is logits, not states. PhaseSumNet's
+`[cos(Θ), sin(Θ)]` representation is *constructed* so that adding any
+multiple of 2π to Θ leaves the readout-relevant content invariant.
+The 16 phase dimensions each independently sum to a multiple of 2π
+after 5 TWIRLs (because the model learns θ(TWIRL) ≡ k·2π/5 in each
+dimension for some integer k); the cos/sin pair returns to the same
+point on the unit circle; the readout returns the same logits. State
+magnitude is constant at √d = 4.
+
+The GRU has no such alignment. Its 64-dim state moves only a little
+after 5 TWIRLs (small ‖Δ‖), but the linear readout *amplifies* that
+small shift into a logit ‖Δ‖ of **10.03**, 22× larger than
+PhaseSumNet's 0.46. There is no subspace of the GRU's state that's
+both (a) preserved under the TWIRL action and (b) the subspace the
+readout cares about.
+
+### The per-k pattern reveals the failure mode
+
+The interesting structure shows up when we plot argmax-invariance as a
+function of k:
+
+| k | GRU argmax invariance | what's happening |
+|--:|--:|---|
+| 0 | 0.83 | still inside training distribution |
+| 1 | 0.63 | training boundary |
+| 2 | 0.28 | crossing into OOD |
+| **3–7** | **0.00** | **transition zone, complete failure** |
+| 8–11 | 0.38 | start of recovery |
+| 12–15 | 0.50–0.61 | partial recovery |
+| 16–19 | 0.67–0.80 | further recovery |
+| 20–25 | 0.85–0.98 | saturation |
+
+This is the signature of a model whose state saturates. Look at the
+magnitude curve: ‖h‖ grows from 5.12 (k=0) to 7.04 (k=30) and
+asymptotes — the tanh ceiling. By k≈20 the GRU's state has nearly
+stopped moving with additional TWIRLs (logit ‖Δ‖ between k and k+5
+falls from 24.96 at k=5 to 2.05 at k=20). So at large k the GRU's
+*prediction* is approximately constant in k — but it's the *wrong*
+constant. **Argmax invariance is high at k≈25 not because the model
+has learned Z/5, but because it's predicting the same class
+regardless of k.** That class happens to be right 1/5 of the time,
+which is exactly the 0.25 OOD accuracy floor we observed across all
+of Exp 5.
+
+### The corrected mechanism story
+
+> **The GRU doesn't fail to find a cyclic attractor — it fails to use
+> its state space past the training depth at all.** Its tanh-bounded
+> state saturates as k grows, and the linear readout asymptotes to a
+> near-constant function of k. The OOD accuracy plateau at ~1/n we
+> see across every capacity rung in Exp 5 is exactly this saturation
+> floor: at large k the GRU's argmax is constant, and any constant
+> prediction over a balanced n-class task scores 1/n. **No amount of
+> capacity rescues this**, because the failure is in the state's
+> boundedness, not its dimension.
+>
+> **PhaseSumNet succeeds for a different reason than I expected.**
+> Its state moves *more* than the GRU's (98% relative drift vs 17%),
+> but the movement lives entirely in the readout's null space modulo
+> 5·TWIRL. The cos/sin construction projects the state onto exactly
+> the subspace the readout cares about, and that subspace is invariant
+> under the TWIRL action by design.
+
+The two diagnostics that don't mislead, in order of usefulness for
+predicting OOD accuracy:
+
+1. **Argmax invariance under n·TWIRL** — directly measures the
+   property that has to hold for OOD generalization.
+2. **Logit ‖Δ‖ under n·TWIRL** — same thing in finer-grained units,
+   no thresholding.
+
+State-level closure metrics (Exp 4's "closure under n·TWIRL") are
+weakly correlated with accuracy but can flip in either direction. In
+hindsight that probe should have been logit-level from the start.
+
+### What's in `results_trajectory/`
+
+- `magnitude.png` — state ‖h(k)‖ vs k for both architectures
+- `modular_return.png` — state ‖Δ‖ under 5·TWIRL, absolute and relative
+- `logit_closure.png` — **the headline figure**: logit ‖Δ‖ and argmax
+  invariance vs k, showing the GRU's transition-zone collapse
+- `gru_pca.png`, `phasesum_pca.png` — 2D PCA projections of the
+  state trajectories
+- `summary.json` — per-k numbers for all four diagnostics
+
+Run with: `python3 trajectory_analysis.py`. Trains fresh models on CPU
+in ~3 minutes total.
+
+---
+
 ## How the five experiments fit together
 
 | | Exp 1 | Exp 2 | Exp 3 | Exp 4 | Exp 5 |
@@ -739,7 +858,10 @@ ComplexAttn/
 ├── run_cyclic.py      Exp 4: orchestrator (sweep over n)
 
 ├── models_capacity.py Exp 5: GRU/LSTM with n_layers, PhaseSumRef
-└── run_capacity.py    Exp 5: orchestrator (capacity sweep)
+├── run_capacity.py    Exp 5: orchestrator (capacity sweep)
+
+└── trajectory_analysis.py  Mechanism analysis: GRU state saturation +
+                             logit-level closure probe
 ```
 
 After running, `results/`, `results_exp2/`, `results_exp3/`,
@@ -815,13 +937,16 @@ phase_probe.png        Δ angle histogram (Exp 1 only)
    language model. Test whether downstream NLI accuracy on negated
    propositions improves at small parameter counts.
 
-4. **Mechanism of the gated-real barrier.** What does the GRU's
-   hidden-state trajectory look like at n=5? A natural experiment:
-   plot the d-dimensional state through a long sentence with
-   monotonically increasing TWIRL count. If the trajectory is
-   diverging or chaotic, that's evidence for "no limit cycle exists";
-   if it's nearly periodic with the wrong period, that's evidence for
-   "limit cycle exists but at the wrong frequency".
+4. **Verify the saturation mechanism more rigorously.** The
+   trajectory analysis showed the GRU's state magnitude grows
+   monotonically and saturates against a tanh ceiling, with the
+   linear readout becoming near-constant past training depth. The
+   prediction is sharp: if you replace the GRU's bounded state with
+   an *unbounded* state (e.g., remove the tanh and use a linear RNN
+   with appropriate normalization), the saturation should disappear,
+   and the OOD curve should change shape. If it still plateaus near
+   1/n, the saturation diagnosis is wrong and something else is at
+   work. This is one experiment with a clean prediction either way.
 
 5. **Beyond cyclic groups.** Z/n is the simplest non-trivial group
    family. Real interesting algebra includes non-abelian groups (S_n
