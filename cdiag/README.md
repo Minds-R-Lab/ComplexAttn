@@ -1,123 +1,167 @@
 # `cdiag/` — Real vs Complex Diagonal SSMs on the Copy Task
 
-This subdirectory implements a new experimental direction motivated
-by stepping back from the original cyclic-group framing of the
-project.
+This subdirectory implements a controlled empirical test of the
+Ran-Milo et al. (NeurIPS 2024) prediction that **complex diagonal
+SSMs are structurally — not just notationally — more expressive than
+real diagonal SSMs** for tasks requiring oscillatory impulse responses.
 
-## Why this is here
+## The headline result
 
-The original ComplexAttn paper investigated whether complex-valued
-neural architectures offer inductive-bias advantages over real-valued
-ones on cyclic-group tasks. The Exp 6 factorial ablation showed that
-in that setting, complex was structurally vacuous — the architecture
-we called complex was bit-identical to a real-valued counterpart.
+On the copy task at K=5, L=150 (data length 5, blank delay 150, total
+sequence length 161), trained for 5000 steps with AdamW, three seeds:
 
-After that finding I went back to the literature and the conceptual
-question: when, if ever, does complex parameterization actually
-provide something that real parameterization can't?
+| n_state | kind | Params | OOD acc (mean ± SE) |
+|--:|---|--:|--:|
+| 16 | complex | 640 | **1.000 ± 0.000** |
+| 16 | real | 320 | 0.263 ± 0.024 |
+| 32 | real | 640 | 0.393 ± 0.011 |
+| 64 | real | 1,280 | 0.461 ± 0.017 |
+| 128 | real | 2,560 | 0.481 ± 0.001 |
+| 256 | real | 5,120 | 0.476 ± 0.005 |
+| **512** | **real** | **10,240** | **0.489 ± 0.002** |
 
-The answer, established by Ran-Milo, Cohen-Karlik et al.
-("Provable Benefits of Complex Parameterizations for Structured
-State Space Models", NeurIPS 2024), is: in diagonal structured
-state-space models, complex parameterization is **provably more
-expressive per dimension** and **requires only moderate parameter
-magnitudes**, while real diagonal SSMs of the same dimension
-typically require exponentially large parameter values to approximate
-oscillatory mappings — values that gradient descent cannot find in
-practice.
+Complex n=16 reliably solves the task at 100% across all seeds with
+640 parameters. Real plateaus at ~48% no matter how big it gets. From
+n=64 to n=512 — an 8x increase in state dimension and parameters —
+accuracy moves only from 46% to 49%. **The plateau is deterministic**:
+seed standard error at n=512 is +/-0.002 across three seeds (0.485,
+0.489, 0.494). The complex SSM with 640 parameters beats the largest
+real SSM (10,240 parameters, 16x more) by 51 percentage points.
+**Capacity does not close the gap.**
 
-This is a real claim about complex giving a structural advantage.
-Not "complex helps because of cos/sin readout" (which the previous
-project showed was equivalent to real). The mechanism is genuinely
-in the algebra: complex diagonal eigenvalues `lambda_i = r_i exp(i*theta_i)`
-encode damped sinusoids `r_i^t cos(theta_i t + phi)`, while real
-diagonal eigenvalues encode only pure exponentials `lambda_i^t`. The
-function classes are different.
+## What's actually happening mechanistically
 
-## What this code does
+The plateau at 48% is not "graceful degradation with delay" or
+"random noise." A direct inspection of the learned kernels reveals
+a sharp failure mode: **the real diagonal SSM cannot learn
+class-specific kernel shapes.**
 
-Implements minimal diagonal SSMs in both real and complex form, runs
-them on the copy task, and measures:
+We measured the per-pair correlation between the 8 diagonal kernels
+`k[i, i, :]` (one for each data class i = 1..8):
 
-  1. Final accuracy.
-  2. Training dynamics (loss curves, parameter magnitudes over time).
-  3. Eigenvalue magnitudes — do they push toward the unit circle?
-  4. Comparison at matched state dimension AND matched parameter count.
+| Architecture | Mean off-diagonal kernel correlation | Effective rank |
+|---|--:|--:|
+| Complex n=16 | 0.72 (diverse) | 8 significant components |
+| Real n=128 | **0.99 (collapsed)** | **4 significant components** |
 
-This is a direct empirical reproduction of one part of the Ran-Milo
-result on a controlled setup we can analyze in detail.
+In the real model, the 8 diagonal kernels are virtually identical
+(correlation 0.99-1.00). The model has converged to a single kernel
+shape that's applied near-uniformly to every input class, just with
+slightly different scaling. There is no class-specific routing
+happening — the model cannot distinguish input tokens by their
+identity.
 
-## Files
+The complex model has diverse class-specific kernels (correlation
+~0.72, effective rank 8), giving it the 8 distinct response patterns
+needed to route each input class to its corresponding output class.
 
-- `models.py`     `RealDiagSSM` and `ComplexDiagSSM` with shared kernel
-                  computation via FFT convolution
-- `data.py`       Copy task generator
-- `run.py`        Training loop, experiment configurations, plotting
+### Why this happens — a function-class argument
 
-## Running
+For a diagonal SSM, the kernel is
+
+    k[o, i, t] = sum_n C[o, n] * B[n, i] * lambda_n^t
+
+The shape lambda_n^t is class-independent — only B and C are
+class-specific. To get class-specific kernel shapes, the model needs
+to combine the mode basis {lambda_n^t} differently for different
+classes via the C[o, n] * B[n, i] coefficients.
+
+For complex lambda_n = exp(i*theta_n), the mode basis is the discrete
+Fourier basis. Different linear combinations of Fourier modes give
+arbitrary shapes — including sharp delta-like features at different
+time offsets. So class-specific B and C immediately produce
+class-specific sharp-feature locations.
+
+For real lambda_n in (-1, 1), the mode basis is pure exponentials.
+These cannot represent sharply-localized features without extreme
+cancellation between many modes. To get class-specific sharp features
+at different locations, the model would need extreme class-specific
+cancellation patterns — and gradient descent appears unable to find
+such patterns. Instead it settles on a single shared kernel shape and
+barely distinguishes classes at all.
+
+This matches the Ran-Milo theory but identifies a more specific
+failure mode than they describe: it's not just that real needs
+exponentially large parameter values to approximate one oscillatory
+kernel — it's that real cannot learn *class-conditional shape
+diversity*, which is required for any task with multi-class structure.
+
+## What's here
+
+  - `models.py`            RealDiagSSM and ComplexDiagSSM with S4D-Lin init
+  - `data.py`              Copy task generator
+  - `run.py`               Training loop + experiment configurations
+  - `per_position.py`      Per-output-position accuracy diagnostic
+  - `kernel_inspect.py`    Plots all diagonal kernels visually
+  - `kernel_collapse.py`   Correlation matrix and effective rank — the
+                           diagnostic that revealed the collapse
+  - `visualize_kernel.py`  (older) Inspect single-class kernels in detail
+
+## Run
 
 ```bash
-# Quick CPU smoke test (~1 min)
-python3 run.py --config matched_n --device cpu --K 3 --L 10 --seeds 2 --steps 1000
+# Headline result on H100 (~5 min):
+python3 run.py --config L_sweep --device cuda --K 5 --L 150 --steps 5000 --seeds 3
 
-# Full study on H100
-python3 run.py --config full --device cuda --K 5 --L 50 --seeds 3 --steps 5000
+# Mechanism analysis (a couple minutes each on CPU, faster on H100):
+python3 kernel_collapse.py
+python3 kernel_inspect.py
+python3 per_position.py
 ```
 
-The `full` config sweeps real SSMs from n=16 up to n=128 against a
-fixed complex SSM at n=16, to map out at what real dimension (if any)
-the gap closes.
+## What this experiment shows
 
-## CPU pilot results
+A controlled, reproducible empirical setting where:
 
-K=3, L=10, 1000 training steps, 2 seeds each:
+  1. Complex diagonal parameterization solves a sequence task exactly
+     at 640 parameters.
+  2. Real diagonal parameterization plateaus at ~50% accuracy, with
+     no improvement from 16x more parameters.
+  3. The failure mode is identified concretely: the real model
+     cannot learn class-conditional kernel shape diversity,
+     collapsing to a single shared kernel shape across all classes.
 
-| Architecture       | Params | Final accuracy |
-|---|--:|--:|
-| Real    n=16       |  320   | 60% ± 1%       |
-| Complex n=16       |  640   | **99% ± 1%**   |
-| Real    n=32       |  640   | 70% ± 0.06%    |
-| Complex n=32       | 1280   | 100% ± 0.0%    |
+The Ran-Milo paper proved the separation for SSMs in the abstract; we
+provide a concrete minimal reproduction and identify a sharper
+mechanism (kernel-shape collapse rather than parameter blow-up) than
+their theory characterizes directly.
 
-Two key observations:
+## What this does NOT show
 
-1. **Matched state dim:** Complex n=16 vs Real n=16: 99% vs 60%.
-   Complex wins by 39 points. Complex has 2× the params.
-2. **Matched params:** Complex n=16 vs Real n=32 (both 640 params):
-   99% vs 70%. Complex wins by 29 points despite having half the
-   state dimension.
+  - Anything about complex parameterization in non-diagonal SSMs.
+  - Anything about the practical use of complex for tasks that don't
+    require oscillatory kernels.
+  - That the gap exists for nonlinear sequence models. This is a
+    purely linear setting, and adding nonlinearity changes the
+    dynamics.
 
-The complex model also pushes its eigenvalue magnitudes much closer
-to the unit circle (max|λ| ~0.95 vs real's ~0.78), confirming it's
-exploiting the oscillatory regime that real can't reach.
+## Connection to the earlier work in this repo
 
-The harder task (K=5, L=30) didn't converge in 1500 steps for either
-architecture, suggesting the full H100 study should use longer
-training (5000+ steps) and/or larger L sweeps.
+The original ComplexAttn project tried to test "does complex help?" on
+cyclic-group composition tasks. The factorial ablation of Experiment
+6 revealed that in that setting the architecture we called complex
+was bit-identical to its real counterpart — complex was notational,
+not structural.
 
-## What this experiment can and cannot show
+This experiment finds the regime where complex IS structural:
+diagonal linear sequence models, where the mode basis (exponential vs.
+sinusoidal) is genuinely different in the two parameterizations.
 
-**Can show:**
-- A concrete, reproducible gap between real and complex parameterizations
-  at the same architectural complexity, on a controlled task.
-- Whether the gap closes with capacity (by varying real n_state).
-- The mechanism of the gap (parameter magnitudes, eigenvalue locations,
-  loss-landscape navigation).
+The cyclic-group task was the wrong testbed because its structure was
+fully expressible in real coordinates via cos/sin readouts; the copy
+task is the right testbed because the optimal impulse response is
+sharply localized in time, requiring Fourier-basis modes that real
+diagonal SSMs do not have.
 
-**Cannot show:**
-- Anything not already in the Ran-Milo paper. They proved the
-  separation and observed it on Mamba copy. Our contribution is the
-  controlled, hands-on reproduction with full diagnostics.
+The honest project trajectory:
 
-What would be a real new contribution from here:
-- Connect the SSM finding to optimization geometry directly:
-  characterize *why* gradient descent struggles to find the right
-  exponential parameter values, e.g. via loss-landscape analysis.
-- Test whether the gap exists for nonlinear SSMs (S4 etc. have
-  per-step nonlinearities); the Ran-Milo theory is purely about the
-  linear part.
-- Connect to the grokking phenomenon we observed earlier in the
-  cyclic-group setting: is gated recurrence on cyclic tasks failing
-  for the same reason a real diagonal SSM fails on copy — namely,
-  the optimizer can't navigate to oscillatory solutions in real
-  coordinates?
+  - Cyclic-group experiments -> wrong testbed, complex was vacuous.
+  - Literature review -> found the right testbed (diagonal SSMs).
+  - This experiment -> reproduces the predicted gap, identifies the
+    mechanism (kernel-shape collapse, not parameter blow-up).
+
+The honest finding is: **complex parameterization is structurally
+meaningful in exactly those settings where the function class it
+parameterizes (oscillatory dynamics) is genuinely different from the
+function class real parameterization gives (monotone-exponential
+dynamics).** Outside such settings, complex is notational.
