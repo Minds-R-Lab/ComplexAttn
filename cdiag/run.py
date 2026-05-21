@@ -196,7 +196,7 @@ def plot_param_dynamics(rows, outpath):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="full",
-                    choices=("smoke", "matched_n", "full"))
+                    choices=("smoke", "matched_n", "full", "L_sweep"))
     ap.add_argument("--outdir", default="results_cdiag")
     ap.add_argument("--device", default=None)
     ap.add_argument("--seeds", type=int, default=3)
@@ -230,6 +230,17 @@ def main():
             ("real",    64),    # 4x state dim
             ("real",   128),    # 8x state dim
         ]
+        seeds = list(range(args.seeds))
+        steps = args.steps
+    elif args.config == "L_sweep":
+        # PROPERLY DESIGNED comparison:
+        # Fix complex n_state to be enough that complex solves the task.
+        # Then scale real to many sizes and see if/where it catches up.
+        # The Ran-Milo prediction: real should plateau below 100%
+        # regardless of n_state.
+        configs  = [("complex", 16)]
+        # Real sized aggressively: up to 32x the complex model.
+        configs += [("real", n) for n in [16, 32, 64, 128, 256, 512]]
         seeds = list(range(args.seeds))
         steps = args.steps
 

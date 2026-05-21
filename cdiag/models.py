@@ -104,12 +104,19 @@ class RealDiagSSM(nn.Module):
 
     Input:  x of shape [B, L, d_in]
     Output: y of shape [B, L, d_out]
+
+    Initialization: lambdas spread uniformly over (-1, 1) so the model
+    has both fast (small |lambda|) and slow (|lambda| -> 1) modes at
+    init. This gives the optimizer signal to work with on long
+    sequences, mirroring the S4D-Lin choice for the complex case.
     """
     def __init__(self, n_state: int, d_in: int, d_out: int):
         super().__init__()
         self.n = n_state
-        # lambda_i = tanh(raw_lam[i])  in (-1, 1)
-        self.raw_lam = nn.Parameter(torch.randn(n_state) * 0.5)
+        # Start with lambdas spread over (-1, 1). tanh(2) ~ 0.96, so
+        # raw_lam in [-2, 2] gives lambdas in [-0.96, 0.96].
+        self.raw_lam = nn.Parameter(
+            torch.linspace(-2.0, 2.0, n_state).clone() + 0.05 * torch.randn(n_state))
         self.B = nn.Parameter(torch.randn(n_state, d_in) / (d_in ** 0.5))
         self.C = nn.Parameter(torch.randn(d_out, n_state) / (n_state ** 0.5))
 
@@ -134,16 +141,29 @@ class ComplexDiagSSM(nn.Module):
     """Diagonal SSM with state matrix in C, output's real part.
 
     State dim n_state means n_state COMPLEX states (= 2*n_state real).
+
+    Initialization follows S4D-Lin: magnitudes initialized close to 1
+    so the model starts with long-memory modes; phases spread uniformly
+    over [0, pi] so the model has access to a fan of oscillation
+    frequencies at initialization. With raw_log_mag chosen so initial
+    |lambda| ~ 0.9-0.97, the modes have effective time-constants well
+    matched to long sequences (decay e-fold ~ 30 steps), giving the
+    optimizer signal to work with even on long-delay tasks.
     """
     def __init__(self, n_state: int, d_in: int, d_out: int):
         super().__init__()
         self.n = n_state
-        self.raw_log_mag = nn.Parameter(torch.randn(n_state) * 0.5)
-        # Phases initialized uniformly on [0, pi]; this is the S4D-Lin init
-        # that gives the model a diverse set of oscillation frequencies
-        # from the start.
+        # We want |lambda| = exp(-softplus(raw_log_mag)) ~ 0.95 at init.
+        # softplus(x) = ln(1 + e^x). For softplus(x) = 0.05, x ~ ln(e^0.05 - 1) ~ -2.97.
+        # So initialize raw_log_mag at ~-3 with small noise.
+        self.raw_log_mag = nn.Parameter(
+            torch.full((n_state,), -3.0) + 0.1 * torch.randn(n_state))
+        # Phases spread uniformly on [0, pi]. The complex conjugate of each
+        # mode is implicit since we take Re(...), so [0, pi] gives access
+        # to oscillations of all frequencies up to Nyquist.
         self.raw_phase = nn.Parameter(
-            torch.linspace(0, torch.pi, n_state) + 0.01 * torch.randn(n_state))
+            torch.linspace(0, torch.pi, n_state + 1)[1:].clone()
+            + 0.01 * torch.randn(n_state))
         # B and C as complex parameters: store as real (n, d_in, 2) and form
         # complex tensors on the fly.
         self.B_re = nn.Parameter(torch.randn(n_state, d_in) / (d_in ** 0.5))
