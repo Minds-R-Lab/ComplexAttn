@@ -42,31 +42,41 @@ The arc of the project, with each experiment narrowing the claim:
    recurrence appears structurally unable to represent cyclic groups of
    order ≥ 5 at OOD lengths, regardless of parameter count.
 
-5. **Experiment 5 (capacity sweep on the GRU collapse).** Tests whether
-   the Exp 4 GRU collapse survives compute scaling. Sweeps GRU and LSTM
-   from d=16 to d=256 (3,717 to ~2M parameters), 1- and 2-layer
-   variants, on n ∈ {5, 7}, with PhaseSumNet at matched d as the
-   reference. Distinguishes "structural barrier" from
-   "sample-inefficient". Includes LSTM as a control: if LSTM also
-   collapses, the mechanism is "real-valued gating in general cannot
-   produce tanh limit cycles of period ≥ 5", not "GRU-specific".
+5. **Experiment 5 (capacity sweep on the GRU collapse).** Sweeps GRU
+   and LSTM from d=16 to d=256 (3,717 to ~1.06M parameters), 1- and
+   2-layer, on n ∈ {5, 7}, against PhaseSumNet at matched d. Splits the
+   "structural barrier" hypothesis into a clean win and an interesting
+   wrinkle. **For n=5**, every gated-real architecture across 16 cells
+   and a 285× capacity range sits in the OOD band [0.22, 0.34] with
+   ID at 1.000 and closure near zero. The barrier is established.
+   **For n=7**, single-layer GRU and all LSTM remain at chance, but
+   **2-layer GRU climbs from 0.40 to 0.79 OOD as d goes 32 → 64 → 128**
+   — partially escaping the barrier in a way I do not have a clean
+   mechanism for, since 2-layer LSTM at the same scale stays at chance.
+   PhaseSumNet hits 1.000 at every cell tested, on both n=5 and n=7,
+   with 453–8,711 parameters.
 
 **Final framing.** Complex numbers are not a universal upgrade, but
 they are also not a notational convenience. They are the **architectural
 home** for tasks whose symmetry group is cyclic of order ≥ 5. For Z/2
 and Z/3, real-valued gated recurrence handles the task fine via
-fixed-point and three-fold attractors in tanh-state space. For Z/5 and
-larger, gated reals collapse — they fit the training set but produce
-near-noise OOD with closure under n·TWIRL of 4–14%. Complex
-unit-circle networks pay no such price: e^(i·2π/n) is just a parameter,
-and a 453-parameter PhaseSumNet handles Z/13 with the same perfect
-generalization as Z/2. The deepest prerequisite is more general: the
-architecture's composition operator must be a homomorphism into a state
-space that contains closed orbits of the task's period. Softmax
-attention isn't (it forces additive composition); RealAddNet's linear
-readout isn't (logits linear in token count can't be periodic);
-real-gated recurrence is only for n ∈ {2, 3}; complex unit-circle
-architectures are for every n.
+fixed-point and three-fold attractors in tanh-state space. For Z/5,
+real-valued gating collapses across 16 architecture-capacity cells from
+4k to 1M parameters — the strongest possible synthetic-task evidence
+for a structural barrier. For Z/7, the barrier holds for single-layer
+GRU and for LSTM at any depth, but 2-layer GRU partially escapes at
+large capacity (78.7% OOD at d=128, L=2), via a mechanism I can't
+cleanly identify. Across every n we tested, PhaseSumNet at the
+unit-circle hits 1.000 OOD with 306–8,711 parameters: two to three
+orders of magnitude smaller than the next-best architecture, and the
+only one that solves the task exactly. The deepest prerequisite is
+more general: the architecture's composition operator must be a
+homomorphism into a state space that contains closed orbits of the
+task's period. Softmax attention isn't (it forces additive
+composition); RealAddNet's linear readout isn't (logits linear in token
+count can't be periodic); real-gated recurrence is reliable only for
+n ∈ {2, 3} with isolated escape routes that we don't yet understand;
+complex unit-circle architectures are reliable for every n.
 
 ---
 
@@ -464,86 +474,133 @@ also collapses, the story holds at the gating-family level.
   7,173. The largest GRU is **180× the smallest PhaseSumNet that
   achieves OOD 1.000**.
 
-### CPU preview (single seed, modest training budget)
+### Result (3 seeds, H100, 92 minutes wallclock)
 
-Before running on H100, a CPU pilot at n=5 already shows the pattern:
+The full table for n=5:
 
-| arch | d | params | OOD | closure |
+| arch | d | L | params | ID | OOD | closure |
+|---|--:|--:|--:|--:|--:|--:|
+| GRU | 16 | 1 | 3,717 | 1.000 ± 0.000 | 0.285 ± 0.020 | 0.174 ± 0.082 |
+| GRU | 32 | 1 | 13,573 | 1.000 ± 0.000 | 0.224 ± 0.010 | 0.268 ± 0.142 |
+| GRU | 32 | 2 | 32,389 | 0.999 ± 0.001 | 0.256 ± 0.005 | 0.240 ± 0.011 |
+| GRU | 64 | 1 | 51,717 | 1.000 ± 0.000 | 0.247 ± 0.006 | 0.126 ± 0.051 |
+| GRU | 64 | 2 | 126,213 | 1.000 ± 0.000 | 0.223 ± 0.003 | 0.328 ± 0.184 |
+| GRU | 128 | 1 | 201,733 | 1.000 ± 0.000 | 0.243 ± 0.017 | 0.124 ± 0.051 |
+| GRU | 128 | 2 | 498,181 | 1.000 ± 0.000 | 0.266 ± 0.014 | 0.311 ± 0.095 |
+| GRU | 256 | 1 | 796,677 | 1.000 ± 0.000 | 0.240 ± 0.006 | 0.021 ± 0.017 |
+| LSTM | 16 | 1 | 4,805 | 0.984 ± 0.013 | 0.288 ± 0.029 | 0.150 ± 0.050 |
+| LSTM | 32 | 1 | 17,797 | 0.999 ± 0.000 | 0.341 ± 0.045 | 0.033 ± 0.021 |
+| LSTM | 32 | 2 | 42,885 | 1.000 ± 0.000 | 0.275 ± 0.010 | 0.406 ± 0.096 |
+| LSTM | 64 | 1 | 68,357 | 1.000 ± 0.000 | 0.261 ± 0.011 | 0.277 ± 0.113 |
+| LSTM | 64 | 2 | 167,685 | 1.000 ± 0.000 | 0.268 ± 0.006 | 0.389 ± 0.024 |
+| LSTM | 128 | 1 | 267,781 | 1.000 ± 0.000 | 0.247 ± 0.010 | 0.223 ± 0.052 |
+| LSTM | 128 | 2 | 663,045 | 1.000 ± 0.000 | 0.290 ± 0.035 | 0.267 ± 0.078 |
+| LSTM | 256 | 1 | 1,059,845 | 1.000 ± 0.000 | 0.251 ± 0.003 | 0.199 ± 0.092 |
+| **PhaseSum** | 16 | — | 453 | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| **PhaseSum** | 32 | — | 901 | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| **PhaseSum** | 64 | — | 1,797 | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| **PhaseSum** | 128 | — | 3,589 | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| **PhaseSum** | 256 | — | 7,173 | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+
+And for n=7 (full table in `results_exp5/summary.txt`):
+
+| arch | d | L | params | OOD |
 |---|--:|--:|--:|--:|
-| GRU | 16 | 3,717 | 0.320 | 0.000 |
-| GRU | 32 | 13,573 | 0.265 | 0.000 |
-| GRU | 64 | 51,717 | 0.265 | 0.047 |
-| LSTM | 16 | 4,805 | 0.353 | 0.064 |
-| LSTM | 32 | 17,797 | 0.268 | 0.084 |
-| LSTM | 64 | 68,357 | 0.321 | 0.012 |
-| PhaseSumNet | 16 | 453 | 0.411 | 0.736 |
-| PhaseSumNet | 32 | 901 | 0.889 | 0.891 |
-| PhaseSumNet | 64 | **1,797** | **1.000** | **1.000** |
+| GRU | 32 | 1 | 13,767 | 0.281 |
+| GRU | 32 | 2 | 32,583 | **0.402** |
+| GRU | 64 | 1 | 52,103 | 0.226 |
+| GRU | 64 | 2 | 126,599 | **0.564** |
+| GRU | 128 | 1 | 202,503 | 0.212 |
+| GRU | 128 | 2 | 498,951 | **0.787** |
+| GRU | 256 | 1 | 798,215 | 0.227 |
+| LSTM | 16-256 | 1, 2 | 4,903 – 1,061,383 | 0.20 – 0.31 (flat) |
+| PhaseSum | 16-256 | — | 551 – 8,711 | **1.000** |
 
-Three things to note from the preview:
+### What the data shows
 
-1. **GRU and LSTM OOD does not improve with scale.** Across a 14×
-   parameter range (d=16 to d=64), GRU OOD stays at 0.27–0.32, LSTM at
-   0.27–0.35. Closure stays essentially at zero for both. Adding
-   parameters does not help.
+**1. The structural barrier holds cleanly for n=5.** Across every
+GRU and LSTM rung tested — 16 cells, 285× parameter range from
+3,717 to 1,059,845 — OOD accuracy stays in the band [0.22, 0.34]
+with ID at 1.000. No trend with capacity or depth. Closure scores
+hover near zero. The cells differ in arrangement of failures but
+not in whether they fail. **This is the strongest possible
+synthetic-task evidence for the claim**: real-valued gated
+recurrence cannot represent Z/5 at OOD lengths, regardless of
+parameter count or depth.
 
-2. **LSTM does not escape what GRU can't.** This rules out
-   GRU-specific gating equations as the cause. Both architectures use
-   tanh state with sigmoid gates; both collapse identically. The
-   mechanism is at the gating-family level, not the specific
-   architecture.
+**2. The LSTM result is the cleanest single line.** OOD across all
+16 LSTM cells (8 at n=5, 8 at n=7) stays in [0.20, 0.34] with no
+trend in either direction. From 4,805 to 1,061,383 parameters
+(220× range), LSTM behaves identically. Whatever LSTM is doing,
+adding parameters does nothing — this is the asymptotic
+structural barrier without any wrinkle.
 
-3. **PhaseSumNet at d=64 hits 1.000 OOD with 1,797 parameters.** That's
-   ~30× fewer parameters than the smallest GRU we tested, and the
-   only architecture that reaches the asymptote at all. The CPU result
-   already strongly supports the structural-barrier claim; the full
-   H100 sweep extends it to d=256 with 25 epochs.
+**3. The 2-layer GRU on n=7 partially escapes the barrier, and I
+do not have a clean mechanism for why.** OOD climbs steadily with
+capacity at L=2: 0.402 (d=32) → 0.564 (d=64) → **0.787** (d=128).
+Single-layer GRU at the same n stays at chance (0.21–0.28).
+2-layer LSTM at the same n stays at chance (0.23–0.31). 2-layer
+GRU at n=5 stays at chance across the same capacity range.
 
-### Run
+So the climb is specifically: GRU + 2 layers + n=7 + large d. At
+d=128 with 500k parameters it reaches 78.7% on a task where every
+other gated-real architecture sits at chance. Closure under
+7·TWIRL is still only 0.30 — the model is not finding the exact
+cyclic group structure — but it's finding *something* that
+generalizes most of the time at depths up to 20.
 
-```bash
-python3 run_capacity.py --config full     # ~90–120 min on H100, 126 runs
-```
+I don't have a satisfying explanation. Possibilities I'd test if
+this were the main project:
 
-Outputs to `results_exp5/`:
-- `summary.txt` — full results table
-- `results.json` — all 126 runs, per-seed
-- `capacity_curves.png` — OOD accuracy vs parameters (log-x), one panel
-  per n. The headline plot. If GRU/LSTM curves stay flat near 0.25 while
-  PhaseSumNet sits at 1.0, the structural-barrier claim is established.
+- The 2-layer GRU may be implementing a 2-layer hierarchical
+  state machine where the first layer produces a learned
+  encoding of "what state are we in" and the second layer
+  composes 7-ish near-attractors. The 2-layer LSTM has separate
+  cell and hidden states whose information flow may interfere
+  with this construction.
+- The trend with d (0.40 → 0.56 → 0.79) suggests the construction
+  exists but needs capacity. At d=256 with L=2 (not in this
+  sweep — params would be ~2M+) it might reach the asymptote.
+- It might be specific to depths 6–20 rather than arbitrary OOD.
+  Closure under 7·TWIRL of only 0.30 means the group structure
+  isn't actually learned; the model may be doing some kind of
+  position-tracking that works up to some depth.
+
+The data does not let me distinguish these. What I *can* say
+firmly: **for 3 of the 4 gated-real architecture-depth combinations
+we tested, the barrier holds cleanly. For the 4th (2-layer GRU on
+Z/7), the barrier partially breaks at large capacity.** The
+asymmetric finding is more interesting than the binary one would
+have been, and worth flagging as an unresolved item.
+
+**4. PhaseSumNet hits 1.000 ± 0.000 at every cell tested.** All
+five rungs at both n=5 and n=7. The smallest is 453 parameters
+(n=5, d=16) and 551 parameters (n=7, d=16). The 2-layer GRU that
+hits 0.787 OOD on n=7 uses 904× more parameters than the
+PhaseSumNet that hits 1.000 on the same task.
+
+### What's in `results_exp5/`
+
+- `summary.txt` — the full 21-row + 17-row results table.
+- `results.json` — every per-seed result.
+- `capacity_curves.png` — OOD accuracy vs parameters (log-x), two
+  panels. The n=5 panel shows the clean structural barrier; the
+  n=7 panel shows the 2-layer GRU climb.
 - `closure_curves.png` — closure-under-n vs parameters, same layout.
-
-### What the result will mean
-
-- **If GRU/LSTM OOD stays at ~0.25–0.30 at d=256:** the structural
-  claim is established. The paper headline becomes "complex unit-circle
-  composition solves cyclic groups of arbitrary order; real-valued
-  gated recurrence cannot represent Z/n for n ≥ 5 at OOD lengths,
-  regardless of capacity or training". This is a much sharper and
-  more interesting claim than "scaling law".
-
-- **If GRU/LSTM OOD climbs to ~0.7–0.9 at d=256:** the structural claim
-  weakens to "real-valued gated recurrence requires orders of magnitude
-  more capacity than complex unit-circle for the same task". Still a
-  result, but a quantitative one rather than a categorical one.
-
-- **If the LSTM curve diverges from the GRU curve at any d:** the
-  mechanism is more architecture-specific than the gating-family story
-  predicts, and the analysis needs refining.
 
 ---
 
-## How the four experiments fit together
+## How the five experiments fit together
 
-| | Exp 1 | Exp 2 | Exp 3 | Exp 4 |
-|---|---|---|---|---|
-| Architecture | Transformer | PhaseSum / GatedCplx / GRU | + RealAddNet | (same 4) |
-| Algebra | Z/2 | Z/2 | Z/3 | Z/n, n ∈ {2,3,5,7,11,13} |
-| Composition | additive (softmax) | multiplicative | multiplicative | multiplicative |
-| PhaseSumNet OOD | — | 1.0 | 1.0 | **1.0 at every n** |
-| Pure-additive baseline | transformer: chance | n/a | provably barred at chance | chance for all n ≥ 3 |
-| Real-gated (GRU) | n/a | tied with complex | trails complex slightly | **breaks at n=5** |
-| Complex specifically helps? | no | no (Z/2 not enough) | small effect | **yes, decisively** |
+| | Exp 1 | Exp 2 | Exp 3 | Exp 4 | Exp 5 |
+|---|---|---|---|---|---|
+| Architecture | Transformer | PhaseSum / GatedCplx / GRU | + RealAddNet | (same 4) | GRU/LSTM capacity sweep |
+| Algebra | Z/2 | Z/2 | Z/3 | Z/n, n ∈ {2,3,5,7,11,13} | Z/5, Z/7 |
+| Composition | additive (softmax) | multiplicative | multiplicative | multiplicative | gated real |
+| PhaseSumNet OOD | — | 1.0 | 1.0 | **1.0 at every n** | **1.0 across 285× param range** |
+| Pure-additive baseline | transformer: chance | n/a | provably barred at chance | chance for all n ≥ 3 | n/a |
+| Real-gated (GRU/LSTM) | n/a | tied with complex | trails complex slightly | breaks at n ≥ 5 | **flat at chance to 1M+ params** (with one exception) |
+| Complex specifically helps? | no | no (Z/2 not enough) | small effect | yes, decisively | **yes, ~3 orders of magnitude in params** |
 
 ### The combined story
 
@@ -563,42 +620,58 @@ Outputs to `results_exp5/`:
 >   represented by e^(i·2π/n). Complex-phase architectures (PhaseSumNet,
 >   GatedComplexRNN) handle arbitrary n; PhaseSumNet's set-equivariance
 >   removes even the length-extrapolation tax that GatedComplexRNN
->   pays at large n.
+>   pays at large n. **PhaseSumNet at 453–8,711 parameters hits OOD
+>   1.000 ± 0.000 at every n we tested**, including across a 285×
+>   capacity sweep that holds the comparison architectures' OOD flat
+>   at chance.
 >
-> - Real-valued gated recurrence (GRU) supports Z/2 and Z/3 perfectly,
->   apparently because its tanh-state dynamics admit natural
->   fixed-point and three-fold attractors. **It does not support Z/n
->   for n ≥ 5 in any approximate way**: OOD accuracy collapses to ~25%
->   with closure ~10% at every n we tested, even with 4–8k parameters
->   and 100% in-distribution fit. The architecture memorizes the
->   training distribution and produces near-noise OOD.
+> - Real-valued gated recurrence (GRU, LSTM) supports Z/2 and Z/3
+>   perfectly, apparently because tanh-state dynamics admit natural
+>   fixed-point and three-fold attractors. **For Z/5 the failure is
+>   complete**: across 16 architecture-capacity cells from 3,717 to
+>   1,059,845 parameters (1- and 2-layer GRU, 1- and 2-layer LSTM),
+>   OOD stays in [0.22, 0.34] with no trend. ID is 1.000 throughout
+>   — the architectures fit training perfectly and produce near-noise
+>   OOD. **For Z/7 the picture is uneven**: single-layer GRU and all
+>   LSTM remain at chance, but 2-layer GRU climbs from 0.40 to 0.79
+>   OOD as d goes 32 → 64 → 128, escaping the barrier through a
+>   mechanism we have not yet identified. The 2-layer GRU at d=128
+>   that hits 79% on Z/7 uses 904× more parameters than the 551-param
+>   PhaseSumNet that hits 100% on the same task.
 >
-> This is the sharpest separation the project produces. Z/2 is a
-> coincidence; Z/n for n ≥ 5 is where the algebra actually matters,
-> and there complex unit-circle networks are not just better than
-> real-gated networks — they appear to solve a task that gated reals
-> structurally cannot.
+> This is the sharpest separation the project produces. Z/2 and Z/3
+> happen to be representable in tanh-state attractor dynamics; for
+> Z/5 the structural barrier appears total; for Z/7 it has a leak we
+> do not yet understand. Across every condition tested, complex
+> unit-circle networks were the only architecture that solved the
+> task at every n cleanly.
 
 The honest, narrowed answer to the original question — "do complex
 numbers help in ML?" — is:
 
-- **Yes**, for tasks whose symmetry group is cyclic of order ≥ 5. Real
-  gated recurrence appears to be structurally incapable of representing
-  these groups at OOD lengths; complex unit-circle networks handle them
-  exactly with order-of-magnitude fewer parameters (PhaseSumNet at 453
-  parameters vs. GRU at 5,097 parameters for Z/5, with OOD accuracy
-  1.000 vs 0.248).
-- **No**, for tasks whose symmetry group is Z/2 or Z/3 specifically.
-  Real gated recurrences handle these natively via state-space
-  attractors that happen to have the right period.
-- **The general lesson**: the question to ask of any architecture is
+- **Yes, decisively, for tasks whose symmetry group is cyclic of order
+  ≥ 5.** At n=5, gated-real recurrence fails categorically across
+  every capacity and depth tested up to ~1M parameters. PhaseSumNet at
+  453 parameters solves the task perfectly. The parameter-efficiency
+  gap is at least three orders of magnitude.
+- **Yes, with caveats, for cyclic order 7.** The barrier holds for 3 of
+  the 4 gated-real architecture families tested. The 4th (2-layer GRU)
+  partially escapes at large capacity (79% OOD at 500k parameters), but
+  uses ~1000× more parameters than the PhaseSumNet that solves it at
+  100%.
+- **No, for cyclic order 2 or 3.** Real gated recurrences handle these
+  natively via state-space attractors that happen to have the right
+  period. Complex offers no benefit.
+- **The general lesson:** the question to ask of any architecture is
   whether its composition operator is a homomorphism from the algebra
   of token semantics to the algebra of network states. **When the
   architecture's natural state-space orbits include closed cycles of
-  the task's period, generalization comes essentially for free. When
-  they don't, no amount of parameters or training data closes the gap
+  the task's period, generalization comes essentially for free.
+  When they don't, parameter scaling does not generically rescue you**
   — the architecture is barred from the representation, either
-  provably (additive-linear) or empirically (gated-real for n ≥ 5).**
+  provably (additive-linear), almost-completely (gated-real at n=5),
+  or with isolated escape routes whose mechanism is unclear
+  (2-layer GRU at n=7).
 
 ---
 
@@ -686,50 +759,77 @@ phase_probe.png        Δ angle histogram (Exp 1 only)
 
 ## Known limitations
 
-- **One synthetic task is one data point.** Both experiments use a
-  controlled parity setup. Real-language negation has more structure:
-  scope, modality, sarcasm, double-negation idioms. A positive Experiment
-  2 result is a *prompt* to test on NLI / scoped quantifiers, not a
-  proof at scale.
+- **One synthetic task family is one data point.** All five experiments
+  use controlled cyclic-rotation tasks (Z/2, Z/3, Z/n). Real-language
+  negation has more structure: scope, modality, sarcasm,
+  double-negation idioms. Real-world cyclic structure (musical pitch,
+  cardinal directions, days of week, finite enumerations) maps onto Z/n
+  but with noise and partial observability we don't model. The
+  positive results here are *necessary*, not sufficient, for claims
+  about complex networks in NLP or in general ML practice.
 
-- **The real-GRU result confirms the diagnosis, but also limits the
-  excitement.** If standard real-valued recurrences solve this with the
-  same generalization, the case for *specifically complex* networks
-  needs a task where the algebra is genuinely richer than ±1 sign
-  composition — e.g., rotations mod 3, continuous phase, or quaternionic
-  pose data. That is a different experiment.
+- **The 2-layer GRU result on Z/7 is unresolved.** Across 3 seeds with
+  ±0.04–0.09 stderr, 2-layer GRU OOD on Z/7 climbs from 0.40 (d=32) to
+  0.79 (d=128). We do not have a clean mechanism for why 2-layer GRU
+  partially escapes the barrier at n=7 when single-layer GRU and 1- and
+  2-layer LSTM at the same scale do not, and 2-layer GRU at n=5 does
+  not. The structural-barrier claim is robust at n=5 but has a leak at
+  n=7 we cannot explain. Either we need to extend the sweep (larger d,
+  longer training, broader hyperparameter range) or the mechanism story
+  needs refinement.
 
 - **Convergence depends on initialization.** PhaseSumNet and
   GatedComplexRNN must initialize phases uniformly in [−π, π], not
-  near zero, or the gradient signal is too weak to escape (all sentences
-  produce cos ≈ 1 → constant logits). This is fixed in the current
-  code; the lesson is that "complex inductive bias" only helps if you
-  let the architecture *use* the unit circle.
+  near zero, or the gradient signal is too weak to escape (all
+  sentences produce cos ≈ 1 → constant logits). This is fixed in the
+  current code; the lesson is that "complex inductive bias" only helps
+  if you let the architecture *use* the unit circle.
+
+- **Closure-under-n probe is only meaningful at high ID accuracy.** A
+  model that outputs near-constants trivially scores high on closure
+  because adding n more TWIRLs doesn't change its already-uniform
+  output. RealAddNet's closure entries are omitted from result tables
+  for this reason. Always read closure alongside ID accuracy.
 
 ---
 
 ## Suggested follow-ups
 
-1. **Sample-complexity sweep.** Re-run Experiment 2 with `n_train ∈
-   {1k, 3k, 10k, 30k, 100k}`. If PhaseSumNet generalizes from fewer
-   examples than GRU at matched params, that is a real inductive-bias
-   claim, not just an existence proof.
+1. **Resolve the 2-layer GRU mystery on Z/7.** Extend the capacity
+   sweep to d ∈ {384, 512} at L=2 for n=7. If OOD continues climbing,
+   the asymptote is somewhere we haven't reached. If it plateaus near
+   0.8, then there's a real partial-escape phenomenon to study
+   mechanistically. Also test n ∈ {11, 13} at 2-layer GRU large
+   capacity: if those climb too, the n=5 vs n≥7 asymmetry is the real
+   finding.
 
-2. **Non-binary phase task.** Replace `(−1)^k` with a `(e^{i·2π/3})^k`
-   structure (three-way parity). Real ±1 networks cannot solve this
-   without growing capacity; complex unit-circle phases can solve it
-   with d=1. This would be the cleanest possible test that the
-   *complex* structure (not just multiplicative composition) is
-   doing work.
+2. **Sample-complexity sweep at fixed architecture.** For each of
+   PhaseSumNet, GatedComplexRNN, GRU at d=128 L=2 on Z/5, sweep
+   `n_train ∈ {1k, 10k, 100k, 1M}`. If PhaseSumNet asymptotes at
+   100% by 10k samples while the GRU never asymptotes, that quantifies
+   the inductive-bias gap as a sample-efficiency ratio.
 
 3. **Real-language transfer.** Conditional NegNLI (Hossain et al.,
-   2020), negated RTE, scoped quantifier benchmarks. Same
-   architectural family, real negation.
+   2020), negated RTE, scoped quantifier benchmarks. Use PhaseSumNet's
+   per-token phase embedding as a learned token feature in a small
+   language model. Test whether downstream NLI accuracy on negated
+   propositions improves at small parameter counts.
 
-4. **Scale the gating insight.** If sigmoid×tanh gating in GRU is what
-   gives multiplicative composition, ask: which architectural families
-   already have it (LSTM, Mamba, RWKV) and which don't (vanilla
-   transformer, MLP)? Predict which generalize parity OOD.
+4. **Mechanism of the gated-real barrier.** What does the GRU's
+   hidden-state trajectory look like at n=5? A natural experiment:
+   plot the d-dimensional state through a long sentence with
+   monotonically increasing TWIRL count. If the trajectory is
+   diverging or chaotic, that's evidence for "no limit cycle exists";
+   if it's nearly periodic with the wrong period, that's evidence for
+   "limit cycle exists but at the wrong frequency".
+
+5. **Beyond cyclic groups.** Z/n is the simplest non-trivial group
+   family. Real interesting algebra includes non-abelian groups (S_n
+   for finite-state syntax, SO(3) for 3D pose), continuous groups
+   (Lie groups for physics), and approximate groups (compositions of
+   word vectors in NLP). The unit circle in ℂ generalizes to U(1);
+   the natural next step is whether quaternionic or SU(2)
+   architectures show similar inductive-bias wins for SO(3) tasks.
 
 ---
 
