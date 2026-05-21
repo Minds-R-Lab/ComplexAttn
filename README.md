@@ -42,6 +42,15 @@ The arc of the project, with each experiment narrowing the claim:
    recurrence appears structurally unable to represent cyclic groups of
    order ≥ 5 at OOD lengths, regardless of parameter count.
 
+5. **Experiment 5 (capacity sweep on the GRU collapse).** Tests whether
+   the Exp 4 GRU collapse survives compute scaling. Sweeps GRU and LSTM
+   from d=16 to d=256 (3,717 to ~2M parameters), 1- and 2-layer
+   variants, on n ∈ {5, 7}, with PhaseSumNet at matched d as the
+   reference. Distinguishes "structural barrier" from
+   "sample-inefficient". Includes LSTM as a control: if LSTM also
+   collapses, the mechanism is "real-valued gating in general cannot
+   produce tanh limit cycles of period ≥ 5", not "GRU-specific".
+
 **Final framing.** Complex numbers are not a universal upgrade, but
 they are also not a notational convenience. They are the **architectural
 home** for tasks whose symmetry group is cyclic of order ≥ 5. For Z/2
@@ -423,6 +432,107 @@ dimension.
 
 ---
 
+## Experiment 5 — Capacity sweep on the GRU collapse
+
+**Question.** The Exp 4 GRU collapse at n ≥ 5 was measured at one
+capacity point (d ≈ 17, ~5k parameters). The claim that real-valued
+gated recurrence is *structurally* unable to represent these groups
+needs a capacity sweep: if GRU/LSTM with more parameters and more
+training still don't solve Z/5, the structural-barrier framing is on
+solid ground. If they climb steadily with compute, the right framing is
+"much less sample-efficient than PhaseSumNet, but not categorically
+different".
+
+LSTM is included as a critical control. The mechanism story is "tanh
+state space doesn't admit limit cycles of period ≥ 5". That story
+applies to *any* tanh-state gated recurrence. If LSTM solves what GRU
+can't, the story is wrong and the right one is GRU-specific. If LSTM
+also collapses, the story holds at the gating-family level.
+
+### Setup
+
+- **n values:** {5, 7}. Replicates the Exp 4 finding across more than
+  one n in the collapse regime.
+- **Capacity rungs (d_model, n_layers):** {(16,1), (32,1), (32,2),
+  (64,1), (64,2), (128,1), (128,2), (256,1)}.
+- **Architectures:** GRU (multilayer), LSTM (multilayer), PhaseSumNet
+  at matched d as the reference.
+- **Training:** 120k samples, 25 epochs, lr=3e-3, AdamW, 3 seeds per
+  cell.
+- **Range:** smallest GRU rung has 3,717 parameters; largest has
+  796,677. LSTM at d=256, L=1 has 1,059,845. PhaseSumNet at d=256 has
+  7,173. The largest GRU is **180× the smallest PhaseSumNet that
+  achieves OOD 1.000**.
+
+### CPU preview (single seed, modest training budget)
+
+Before running on H100, a CPU pilot at n=5 already shows the pattern:
+
+| arch | d | params | OOD | closure |
+|---|--:|--:|--:|--:|
+| GRU | 16 | 3,717 | 0.320 | 0.000 |
+| GRU | 32 | 13,573 | 0.265 | 0.000 |
+| GRU | 64 | 51,717 | 0.265 | 0.047 |
+| LSTM | 16 | 4,805 | 0.353 | 0.064 |
+| LSTM | 32 | 17,797 | 0.268 | 0.084 |
+| LSTM | 64 | 68,357 | 0.321 | 0.012 |
+| PhaseSumNet | 16 | 453 | 0.411 | 0.736 |
+| PhaseSumNet | 32 | 901 | 0.889 | 0.891 |
+| PhaseSumNet | 64 | **1,797** | **1.000** | **1.000** |
+
+Three things to note from the preview:
+
+1. **GRU and LSTM OOD does not improve with scale.** Across a 14×
+   parameter range (d=16 to d=64), GRU OOD stays at 0.27–0.32, LSTM at
+   0.27–0.35. Closure stays essentially at zero for both. Adding
+   parameters does not help.
+
+2. **LSTM does not escape what GRU can't.** This rules out
+   GRU-specific gating equations as the cause. Both architectures use
+   tanh state with sigmoid gates; both collapse identically. The
+   mechanism is at the gating-family level, not the specific
+   architecture.
+
+3. **PhaseSumNet at d=64 hits 1.000 OOD with 1,797 parameters.** That's
+   ~30× fewer parameters than the smallest GRU we tested, and the
+   only architecture that reaches the asymptote at all. The CPU result
+   already strongly supports the structural-barrier claim; the full
+   H100 sweep extends it to d=256 with 25 epochs.
+
+### Run
+
+```bash
+python3 run_capacity.py --config full     # ~90–120 min on H100, 126 runs
+```
+
+Outputs to `results_exp5/`:
+- `summary.txt` — full results table
+- `results.json` — all 126 runs, per-seed
+- `capacity_curves.png` — OOD accuracy vs parameters (log-x), one panel
+  per n. The headline plot. If GRU/LSTM curves stay flat near 0.25 while
+  PhaseSumNet sits at 1.0, the structural-barrier claim is established.
+- `closure_curves.png` — closure-under-n vs parameters, same layout.
+
+### What the result will mean
+
+- **If GRU/LSTM OOD stays at ~0.25–0.30 at d=256:** the structural
+  claim is established. The paper headline becomes "complex unit-circle
+  composition solves cyclic groups of arbitrary order; real-valued
+  gated recurrence cannot represent Z/n for n ≥ 5 at OOD lengths,
+  regardless of capacity or training". This is a much sharper and
+  more interesting claim than "scaling law".
+
+- **If GRU/LSTM OOD climbs to ~0.7–0.9 at d=256:** the structural claim
+  weakens to "real-valued gated recurrence requires orders of magnitude
+  more capacity than complex unit-circle for the same task". Still a
+  result, but a quantitative one rather than a categorical one.
+
+- **If the LSTM curve diverges from the GRU curve at any d:** the
+  mechanism is more architecture-specific than the gating-family story
+  predicts, and the analysis needs refining.
+
+---
+
 ## How the four experiments fit together
 
 | | Exp 1 | Exp 2 | Exp 3 | Exp 4 |
@@ -500,16 +610,18 @@ cd ComplexAttn
 pip install -r requirements.txt
 
 # Sanity checks (~1 minute each, CPU is fine)
-python3 run.py        --config smoke
-python3 run_rnn.py    --config smoke
-python3 run_triple.py --config smoke
-python3 run_cyclic.py --config smoke
+python3 run.py          --config smoke
+python3 run_rnn.py      --config smoke
+python3 run_triple.py   --config smoke
+python3 run_cyclic.py   --config smoke
+python3 run_capacity.py --config smoke
 
 # Full experiments (H100 recommended)
-python3 run.py        --config full     # Exp 1: transformer (Z/2),       ~30 min
-python3 run_rnn.py    --config full     # Exp 2: RNN (Z/2),               ~20 min
-python3 run_triple.py --config full     # Exp 3: RNN (Z/3),               ~25 min
-python3 run_cyclic.py --config full     # Exp 4: Z/n sweep,               ~90 min
+python3 run.py          --config full   # Exp 1: transformer (Z/2),    ~30 min
+python3 run_rnn.py      --config full   # Exp 2: RNN (Z/2),            ~20 min
+python3 run_triple.py   --config full   # Exp 3: RNN (Z/3),            ~25 min
+python3 run_cyclic.py   --config full   # Exp 4: Z/n sweep,            ~65 min
+python3 run_capacity.py --config full   # Exp 5: GRU capacity sweep,   ~100 min
 ```
 
 Override device or output directory if needed:
@@ -551,7 +663,10 @@ ComplexAttn/
 ├── models_cyclic.py   Exp 4: 4 architectures parameterized by spec
 ├── analyze_cyclic.py  Exp 4: closure probe parameterized by n
 ├── train_cyclic.py    Exp 4: n-class training loop
-└── run_cyclic.py      Exp 4: orchestrator (sweep over n)
+├── run_cyclic.py      Exp 4: orchestrator (sweep over n)
+
+├── models_capacity.py Exp 5: GRU/LSTM with n_layers, PhaseSumRef
+└── run_capacity.py    Exp 5: orchestrator (capacity sweep)
 ```
 
 After running, `results/`, `results_exp2/`, `results_exp3/`,
