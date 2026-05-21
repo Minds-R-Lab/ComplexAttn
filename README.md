@@ -62,23 +62,23 @@ home** for tasks whose symmetry group is cyclic of order ≥ 5. For Z/2
 and Z/3, real-valued gated recurrence handles the task fine via
 fixed-point and three-fold attractors in tanh-state space. For Z/5,
 real-valued gating collapses across 16 architecture-capacity cells from
-4k to 1M parameters. The mechanism is not that "tanh can't make limit
-cycles of period 5" — it's subtler: the GRU's tanh-bounded state
-*saturates* past the training depth, and once saturated the linear
-readout becomes a near-constant function of k. OOD accuracy plateaus
-at exactly 1/n, the chance value for any constant prediction over n
-balanced classes. **No amount of capacity rescues this**, because the
-failure is in the boundedness of the state, not its dimension.
-PhaseSumNet succeeds for the inverse reason: its `[cos(Θ), sin(Θ)]`
-state is *constructed* so the readout-relevant subspace is invariant
-under the TWIRL action by design. State moves a lot in absolute terms;
-logits don't move at all. Across every n we tested, PhaseSumNet at
-the unit circle hits 1.000 OOD with 306–8,711 parameters: two to three
-orders of magnitude smaller than the next-best architecture, and the
-only one that solves the task exactly. The deepest prerequisite is
-**alignment between state geometry and readout**: the architecture's
-composition operator must move state along directions the readout
-ignores, modulo the task's period.
+4k to 1M parameters; the mechanism is state saturation against the
+tanh ceiling, after which the readout becomes a near-constant function
+of k and OOD accuracy floors at exactly 1/n (chance). **No amount of
+capacity we tested rescues this on Z/5.** On Z/7 with 2-layer GRU at
+large d, the barrier leaks via *grokking*: a phase transition during
+late training where the model jumps from lookup-table behaviour (OOD
+~0.70) to approximate Z/7 representation (OOD ~0.95). This happens at
+about one seed in three within practical training budgets, needs both
+large capacity and many steps past loss-zero, and produces a regime
+where the GRU's state has stopped saturating and roughly aligned with
+its readout. PhaseSumNet faces no such phase transition: its
+`[cos(Θ), sin(Θ)]` state is invariant under the TWIRL action by
+construction, and it hits OOD 1.000 by training step 1000 with
+306–8,711 parameters at every n we tested. The qualitative separation
+is between *architecture matches symmetry by construction* (PhaseSumNet
+at every n) versus *architecture happens to find an approximate match
+via late-training grokking, sometimes* (2-layer GRU at n=7 only).
 
 ---
 
@@ -706,6 +706,97 @@ hindsight that probe should have been logit-level from the start.
 
 Run with: `python3 trajectory_analysis.py`. Trains fresh models on CPU
 in ~3 minutes total.
+
+### Update — the n=7 2-layer GRU does something else: grokking
+
+The same diagnostics applied to the **2-layer GRU at d=128 on Z/7**
+(the partial-escape cell from Exp 5) revealed a different mechanism
+than the n=5 failure, and forced a partial revision of the
+"structural barrier" framing.
+
+The trained model hit OOD 0.947 — substantially higher than Exp 5's
+3-seed average of 0.787. The training log shows why: a textbook
+grokking trajectory.
+
+| step | train loss | OOD acc |
+|--:|--:|--:|
+| 500   | 0.0005 | 0.632 |
+| 2000  | 0.0001 | 0.702 |
+| 5000  | 0.0000 | 0.708 |
+| **6000**  | **0.0005 → 0.0001** | **0.940** |
+| 8000  | 0.0000 | **0.947** |
+| 11700 | 0.0000 | 0.947 |
+
+Training loss was at zero by step 2000 and stayed there. OOD sat on a
+plateau at ~0.70 for the next 4000 steps, then jumped at step 6000 to
+0.94 — a phase transition while loss is already converged. This is
+the standard grokking signature.
+
+The trajectory diagnostics on the grokked model:
+
+| | 1-layer GRU Z/5 (fails) | **2-layer GRU Z/7 (grokked)** | PhaseSumNet Z/7 |
+|---|--:|--:|--:|
+| OOD accuracy | 0.23 | **0.947** | 1.000 |
+| State magnitude ratio (30 / 5) | 1.19 | **1.02** | 1.00 |
+| State ‖Δ‖ relative | 0.13 | 0.17 | 0.98 |
+| Logit ‖Δ‖ | 9.87 | **3.30** | 0.46 |
+| Argmax invariance under n·TWIRL | 0.58 | **0.86** | 1.000 |
+
+**The grokked GRU sits exactly between failure and success.** Its
+magnitude ratio of 1.02 means **the state has stopped saturating** —
+unlike the 1-layer Z/5 GRU which asymptoted against the tanh ceiling
+(ratio 1.19), the grokked 2-layer GRU has found a bounded,
+approximately-periodic regime. State barely moves, but unlike the
+failing case, the readout *partially* sees through the small movement
+— logit ‖Δ‖ drops from 9.87 to 3.30, argmax invariance jumps from
+0.58 to 0.86. This is what an approximate PhaseSumNet looks like:
+the GRU's gradient descent has discovered, after many steps past
+loss-zero, a state trajectory that roughly aligns with its readout's
+null space modulo 7.
+
+### What this changes about the structural-barrier claim
+
+Less than it might appear, but more than zero. The honest summary:
+
+- **Exp 5's measured collapse at n=5 (16 cells × 285× parameter range,
+  flat at OOD ~0.25) is still real.** Grokking, if it can happen there
+  at all, doesn't happen within 25 epochs at any capacity we tested.
+- **At n=7 with 2-layer GRU at large d, grokking can happen.** The
+  Exp 5 numbers (0.79 ± 0.09 across 3 seeds) are consistent with about
+  one seed in three landing in the grokking basin within 11,700 steps;
+  this trajectory analysis caught a single seed that grokked harder.
+- **A CPU rerun at smaller scale (d=48, n_train=30k, 8 epochs) did NOT
+  grok**, sitting at OOD 0.32 with loss already converged. So grokking
+  appears to need both enough capacity (d=128 worked, d=48 didn't) and
+  enough post-loss-zero training (the H100 run grokked at step 6000,
+  far past loss convergence).
+
+The corrected framing:
+
+> **Real-valued gated recurrence does not face an absolute structural
+> barrier on Z/n for n ≥ 5; but for Z/5 the barrier appears total in
+> practice (no grok observed across 16 cells × 3 seeds × 25 epochs),
+> and even where it leaks (Z/7, 2-layer, large d), grokking is needed
+> — a phase transition that occurs unpredictably far past
+> training-loss convergence.** Complex unit-circle networks have no
+> grokking phase: PhaseSumNet on Z/7 reaches OOD 1.000 by training
+> step 1000 with 551 parameters, while the grokked GRU needs 498,951
+> parameters and 8000 steps to reach 0.947. The qualitative
+> separation — *architecture matches symmetry by construction* vs.
+> *architecture happens to find an approximate match via late-training
+> phase transitions* — remains the central finding of the project.
+
+### What's in `results_trajectory_n7/`
+
+- `magnitude.png` — state magnitude vs k for the grokked GRU and
+  PhaseSumNet on Z/7
+- `logit_closure.png` — logit ‖Δ‖ and argmax invariance for both
+- `invariance_comparison.png` — **the comparison figure**: three
+  curves overlaid showing the failure baseline (1-layer Z/5 GRU), the
+  partial-escape grok (2-layer Z/7 GRU), and the success reference
+  (PhaseSumNet Z/7) on the argmax-invariance axis
+- `summary.json` — per-k numbers for all diagnostics
+
 
 ---
 
