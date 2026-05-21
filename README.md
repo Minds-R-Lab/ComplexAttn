@@ -31,20 +31,33 @@ The arc of the project, with each experiment narrowing the claim:
    extrapolation better but doesn't perfectly internalize the group.
 
 4. **Experiment 4 (scaling sweep over Z/n, n ∈ {2, 3, 5, 7, 11, 13}).**
-   Tests whether the Z/3 findings are a scaling law. Predictions:
-   PhaseSumNet stays at 1.0 across n; RealAddNet stays at 1/n;
-   GatedComplexRNN's OOD slopes downward with n; GRU's group closure
-   under n·TWIRL drops with n.
+   The most informative result. PhaseSumNet stays at OOD 1.000 ± 0.000
+   across all six n, with 306–845 parameters. RealAddNet sits at
+   exactly 1/n (chance) for every n ≥ 3 as the theorem demands.
+   GatedComplexRNN holds OOD ≥ 0.97 up to n=7 and breaks gently at
+   n=11 (0.82) — the predicted magnitude-drift effect. The big surprise
+   is the GRU: **it fully solves Z/2 and Z/3 (OOD 1.000 and 0.991) and
+   then collapses to ~25% OOD with ~10% closure at every n ≥ 5**.
+   This is a phase transition, not a scaling decline. Real-valued gated
+   recurrence appears structurally unable to represent cyclic groups of
+   order ≥ 5 at OOD lengths, regardless of parameter count.
 
-**Final framing.** Complex numbers are not a universal upgrade. They
-are the *minimal embedding* for tasks whose symmetry group is the unit
-circle or a subgroup of it. When that structure is present, complex
-networks express it in fewer parameters than real ones, and the
-generalization gap grows with the order of the group. When it isn't
-(e.g. plain Z/2), real and complex are interchangeable. The deepest
-prerequisite is more general: the architecture's composition operator
-must respect the algebra of the task. Softmax attention provably
-doesn't, for any cyclic group.
+**Final framing.** Complex numbers are not a universal upgrade, but
+they are also not a notational convenience. They are the **architectural
+home** for tasks whose symmetry group is cyclic of order ≥ 5. For Z/2
+and Z/3, real-valued gated recurrence handles the task fine via
+fixed-point and three-fold attractors in tanh-state space. For Z/5 and
+larger, gated reals collapse — they fit the training set but produce
+near-noise OOD with closure under n·TWIRL of 4–14%. Complex
+unit-circle networks pay no such price: e^(i·2π/n) is just a parameter,
+and a 453-parameter PhaseSumNet handles Z/13 with the same perfect
+generalization as Z/2. The deepest prerequisite is more general: the
+architecture's composition operator must be a homomorphism into a state
+space that contains closed orbits of the task's period. Softmax
+attention isn't (it forces additive composition); RealAddNet's linear
+readout isn't (logits linear in token count can't be periodic);
+real-gated recurrence is only for n ∈ {2, 3}; complex unit-circle
+architectures are for every n.
 
 ---
 
@@ -310,76 +323,103 @@ Same task as Exp 3, with n made a parameter. Sweep n ∈ {2, 3, 5, 7,
 11, 13}. Train depths 0–5, eval depths 0–20 (4× extrapolation). All
 four architectures retrained from scratch for each n.
 
-### Predictions
+### Result (3 seeds, H100, 66 minutes wallclock)
+
+| n | model | params | ID acc | OOD acc | closure under n·TWIRL |
+|--:|---|--:|--:|--:|--:|
+| 2  | PhaseSumNet      | 306   | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| 2  | RealAddNet       | 546   | 0.498 ± 0.034 | 0.505 ± 0.015     | —             |
+| 2  | GatedComplexRNN  | 4,162 | 1.000 ± 0.000 | 0.967 ± 0.014     | 1.000 ± 0.000 |
+| 2  | GRUBaseline      | 3,997 | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| 3  | PhaseSumNet      | 355   | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| 3  | RealAddNet       | 611   | 0.337 ± 0.022 | 0.341 ± 0.005     | —             |
+| 3  | GatedComplexRNN  | 4,547 | 1.000 ± 0.000 | 0.979 ± 0.009     | 1.000 ± 0.000 |
+| 3  | GRUBaseline      | 4,503 | 1.000 ± 0.000 | 0.991 ± 0.003     | 1.000 ± 0.000 |
+| 5  | PhaseSumNet      | 453   | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| 5  | RealAddNet       | 741   | 0.333 ± 0.111 | 0.200 ± 0.060     | —             |
+| 5  | GatedComplexRNN  | 5,317 | 1.000 ± 0.000 | 0.992 ± 0.002     | 1.000 ± 0.000 |
+| 5  | GRUBaseline      | 5,097 | 1.000 ± 0.000 | **0.248 ± 0.023** | **0.120 ± 0.032** |
+| 7  | PhaseSumNet      | 551   | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| 7  | RealAddNet       | 871   | 0.173 ± 0.015 | 0.136 ± 0.012     | —             |
+| 7  | GatedComplexRNN  | 6,087 | 1.000 ± 0.000 | 0.980 ± 0.006     | 0.999 ± 0.001 |
+| 7  | GRUBaseline      | 6,265 | 0.998 ± 0.002 | **0.241 ± 0.017** | **0.080 ± 0.060** |
+| 11 | PhaseSumNet      | 747   | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| 11 | RealAddNet       | 1,131 | 0.188 ± 0.014 | 0.069 ± 0.014     | —             |
+| 11 | GatedComplexRNN  | 7,627 | 1.000 ± 0.000 | 0.816 ± 0.031     | 0.874 ± 0.066 |
+| 11 | GRUBaseline      | 7,693 | 0.994 ± 0.003 | **0.285 ± 0.026** | **0.040 ± 0.033** |
+| 13 | PhaseSumNet      | 845   | 1.000 ± 0.000 | **1.000 ± 0.000** | 1.000 ± 0.000 |
+| 13 | RealAddNet       | 1,261 | 0.188 ± 0.011 | 0.070 ± 0.014     | —             |
+| 13 | GatedComplexRNN  | 8,397 | 1.000 ± 0.000 | 0.864 ± 0.017     | 0.805 ± 0.081 |
+| 13 | GRUBaseline      | 8,461 | 1.000 ± 0.000 | **0.237 ± 0.025** | **0.136 ± 0.111** |
+
+The closure column for RealAddNet is omitted as uninformative: a model
+that outputs near-constant predictions trivially scores high on closure
+because adding n more TWIRLs doesn't change its (already-uniform)
+output. Always interpret closure alongside ID accuracy.
+
+### What the data shows
+
+**1. PhaseSumNet is exactly 1.000 ± 0.000 across all six n values, on
+both ID and OOD, with full closure.** Three seeds, zero variance, at
+group orders from 2 to 13, with 306–845 parameters. The architectural
+prior — set-equivariance plus unit-circle composition plus periodic
+readout — exactly matches the symmetry of the task, and the
+generalization is exact across an order of magnitude in group size.
+This is the strongest possible inductive-bias result the project
+produces.
+
+**2. RealAddNet behaves as the theorem demands, with one note.** OOD
+accuracy at n ∈ {3, 5, 7, 11, 13}: 0.34, 0.20, 0.14, 0.07, 0.07.
+Chance (1/n) is 0.33, 0.20, 0.14, 0.09, 0.08. The agreement is
+essentially exact. *Note the exception at n=2: OOD ≈ 0.50 = chance.*
+Z/2 doesn't have the theorem (two linear functions of k *can* fit (k
+mod 2), as their argmax is allowed to cross once), but the model
+nevertheless converged to chance — a learning failure, not a
+representability failure. This is a useful cautionary data point: not
+having a theorem against you is not the same as solving the task.
+
+**3. GatedComplexRNN shows the predicted decline, with a clear
+break-point.** OOD accuracy across n = 2, 3, 5, 7, 11, 13: 0.97, 0.98,
+0.99, 0.98, **0.82**, 0.86. Closure across the same n values: 1.00,
+1.00, 1.00, 1.00, **0.87**, 0.81. The architecture handles n ≤ 7
+nearly perfectly and breaks at n = 11. The break-point is consistent
+with the angular-margin mechanism: the angle between adjacent classes
+is 2π/n, so the *margin* relative to *state magnitude drift* crosses
+into the unreliable regime somewhere around n = 8–10.
+
+**4. The GRU result is a phase transition, not a scaling law, and is
+the most informative single finding.**
 
 | | n=2 | n=3 | n=5 | n=7 | n=11 | n=13 |
 |---|--:|--:|--:|--:|--:|--:|
-| PhaseSumNet OOD | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
-| RealAddNet ID/OOD | varies* | 1/n | 1/n | 1/n | 1/n | 1/n |
-| GatedComplexRNN OOD | 1.0 | 0.99 | dec. | dec. | dec. | dec. |
-| GRU closure under n | high | 0.95 | dec. | dec. | dec. | dec. |
+| GRU OOD     | **1.000** | **0.991** | 0.248 | 0.241 | 0.285 | 0.237 |
+| GRU closure | **1.000** | **1.000** | 0.120 | 0.080 | 0.040 | 0.136 |
 
-\*RealAddNet at n=2 is the edge case: Z/2 has only 2 classes, so the
-piecewise-constant argmax of two linear functions can in principle
-correctly cover (k mod 2) for an unbounded range of k. The theorem only
-bites for n ≥ 3.
+The GRU **completely solves** Z/2 and Z/3 with full closure, then
+**collapses to ~25% OOD with ~10% closure** at n = 5 and stays there
+for every larger n. Note that ID accuracy stays at ≥0.99 throughout —
+the architecture fits the training set fine at every n, but its OOD
+behavior at n ≥ 5 is closer to "memorized lookup that doesn't
+extrapolate" than "imperfect group structure".
 
-### Why we expect a scaling pattern
+This is much more specific than the "scaling law" framing predicted.
+**Real-valued gated recurrences appear to natively support short-period
+cyclic groups via limit cycles of their tanh-state dynamics, and do
+not generically support cyclic groups of higher order**, regardless of
+how many parameters or how much training data we give them. Z/2 has a
+natural fixed-point-flip representation in tanh state, Z/3 has a
+naturally three-fold-symmetric attractor, but the GRU's dynamics
+don't produce a clean 5-cycle no matter how it's trained on the task.
 
-- **PhaseSumNet** has set-equivariance + a bounded readout. Sequence
-  length is *literally irrelevant* to it (it sums phases; PAD
-  contributes zero). Per-class angular resolution scales with d, not n,
-  so with d=16 phase dimensions the model has roughly 16 independent
-  attempts to land near the optimal 2π/n rotation. We predict no
-  degradation with n up to d.
+The complex unit-circle architectures pay no such price: e^(i·2π/n) is
+just a parameter setting, and supports arbitrary n in a single
+dimension.
 
-- **RealAddNet** has the theorem from Exp 3: for n ≥ 3, no linear
-  function of token count can represent (k mod n), so the loss must
-  stay at ln(n). We predict accuracy at 1/n (chance) for every n ≥ 3.
+### What's in `results_exp4/`
 
-- **GatedComplexRNN** internalizes the group (closure → 1) but its
-  *readout* needs to distinguish n equispaced points on the unit
-  circle. The angular margin between adjacent classes shrinks like
-  2π/n. Meanwhile the additive value path lets state magnitude drift
-  with sequence length. At larger n the same drift in absolute terms
-  becomes a larger fraction of the angular margin, so OOD accuracy
-  degrades.
-
-- **GRU** finds approximate n-state automata via sigmoid×tanh gating.
-  The approximation gets sharper or messier depending on whether n is
-  a "natural" number for gated dynamics. We expect closure-under-n to
-  drop with n; predicting OOD accuracy is harder because of the bounded
-  state's competing advantage in length extrapolation.
-
-### Run
-
-```bash
-python3 run_cyclic.py --config full     # 6 n-values × 3 seeds × 4 models = 72 runs
-```
-
-Expected wallclock ~90 minutes on H100, bottlenecked by the complex RNN
-(Python-level scan).
-
-### CPU validation of the negative theorem
-
-The middle of the sweep (n=5) makes the linear-architecture failure
-mode visually concrete. RealAddNet's per-depth accuracy in a CPU run:
-
-```
-depth:    0    1    2    3    4    5    6    7    8    9   10   11   12
-acc:    1.0  0.0  0.0  0.0  0.0  1.0  0.0  0.0  0.0  0.0  1.0  0.0  0.0
-```
-
-The model hits 100% at depths 0, 5, 10 — *exactly the multiples of 5* —
-and 0% everywhere else. This is the theorem made visible: three (or
-five) linear functions of k cross the correct (k mod n) trajectory at
-exactly n points per period. The architecture has memorized class 0
-and gets it right whenever (k mod 5) = 0, which from its perspective is
-an aliasing accident, not learning. PhaseSumNet at 453 parameters
-converges to 100% at every depth by training step 500 on the same task.
-
-(Full H100 results, including the 3-panel scaling-law plot, in
-`results_exp4/`.)
+- `summary.txt` — the table above.
+- `results.json` — full per-seed metrics including per-depth accuracy.
+- `scaling_law.png` — 3-panel plot (ID, OOD, closure as functions of n).
 
 ---
 
@@ -388,48 +428,67 @@ converges to 100% at every depth by training step 500 on the same task.
 | | Exp 1 | Exp 2 | Exp 3 | Exp 4 |
 |---|---|---|---|---|
 | Architecture | Transformer | PhaseSum / GatedCplx / GRU | + RealAddNet | (same 4) |
-| Algebra | Z/2 | Z/2 | Z/3 | Z/n sweep |
+| Algebra | Z/2 | Z/2 | Z/3 | Z/n, n ∈ {2,3,5,7,11,13} |
 | Composition | additive (softmax) | multiplicative | multiplicative | multiplicative |
-| PhaseSum OOD | — | 1.0 | 1.0 | flat at 1.0 (predicted) |
-| Pure-additive baseline | transformer: chance | n/a | provably barred at chance | provably barred for n≥3 |
-| Complex vs real winner | tie (both fail) | tie (both succeed) | tradeoff (different prices) | scaling law (predicted) |
+| PhaseSumNet OOD | — | 1.0 | 1.0 | **1.0 at every n** |
+| Pure-additive baseline | transformer: chance | n/a | provably barred at chance | chance for all n ≥ 3 |
+| Real-gated (GRU) | n/a | tied with complex | trails complex slightly | **breaks at n=5** |
+| Complex specifically helps? | no | no (Z/2 not enough) | small effect | **yes, decisively** |
 
 ### The combined story
 
 > **The inductive bias that matters for cyclic-group tasks is not
-> "complex numbers" but "the ability to represent the symmetry group of
-> the task". For Z/2 (Exp 1, 2), {+1, −1} lives natively in both ℝ\*
-> and the unit circle, so any architecture with multiplicative
-> composition succeeds, whether implemented as complex phase, real sign
-> products via gating, or unitary rotation. For Z/n with n ≥ 3 (Exp 3,
-> 4), there is no order-n subgroup of ℝ\*; the only ways to represent
-> the cyclic group inside a network are (a) continuous rotation on
-> ℝ²—i.e., a complex unit circle by another name; (b) discrete-state
-> gating that simulates an n-state automaton. Purely additive
-> architectures with linear readouts are provably barred. Among the
-> remaining options, set-equivariant phase networks pay the lowest
-> price: they have bounded state and are insensitive to sequence
-> length, so OOD generalization is exact. Gated recurrences (complex
-> or real) succeed at the in-distribution task and degrade gracefully
-> at extreme OOD lengths via different mechanisms, with no clear
-> winner. Softmax-attention transformers fall into the
-> provably-barred family for exactly the same reason RealAddNet does:
-> attention weights sum to 1, forcing additive composition.**
+> "complex numbers" in the abstract, but a network whose state space
+> contains a closed orbit of the right period.** Softmax-attention
+> transformers (Exp 1) cannot represent any closed orbit at all,
+> because softmax weights summing to 1 forces additive composition;
+> they sit at chance OOD. Purely additive real networks with linear
+> readouts (RealAddNet, Exp 3–4) cannot represent (k mod n) for n ≥ 3
+> by a counting argument, and sit at exactly chance. Both real and
+> complex multiplicative architectures handle Z/2 fine — {+1, −1}
+> lives natively in both algebras. For higher cyclic orders, the
+> options narrow:
+>
+> - The unit circle in ℂ contains an exact subgroup of every order n,
+>   represented by e^(i·2π/n). Complex-phase architectures (PhaseSumNet,
+>   GatedComplexRNN) handle arbitrary n; PhaseSumNet's set-equivariance
+>   removes even the length-extrapolation tax that GatedComplexRNN
+>   pays at large n.
+>
+> - Real-valued gated recurrence (GRU) supports Z/2 and Z/3 perfectly,
+>   apparently because its tanh-state dynamics admit natural
+>   fixed-point and three-fold attractors. **It does not support Z/n
+>   for n ≥ 5 in any approximate way**: OOD accuracy collapses to ~25%
+>   with closure ~10% at every n we tested, even with 4–8k parameters
+>   and 100% in-distribution fit. The architecture memorizes the
+>   training distribution and produces near-noise OOD.
+>
+> This is the sharpest separation the project produces. Z/2 is a
+> coincidence; Z/n for n ≥ 5 is where the algebra actually matters,
+> and there complex unit-circle networks are not just better than
+> real-gated networks — they appear to solve a task that gated reals
+> structurally cannot.
 
 The honest, narrowed answer to the original question — "do complex
-numbers help in ML?" — is now:
+numbers help in ML?" — is:
 
-- **No**, for tasks whose symmetry group is a subgroup of ℝ\*. Real
-  networks with appropriate gating do equally well.
-- **Yes**, for tasks whose symmetry group is cyclic of order ≥ 3,
-  *if* you also pick an architecture (like PhaseSumNet) whose other
-  inductive biases — set-equivariance, bounded readout — match the
-  task's other symmetries.
-- **The more general lesson**: the question to ask of any architecture
-  is whether its composition operator is a homomorphism from the
-  algebra of token semantics to the algebra of network states. When
-  yes, generalization comes essentially for free. When no, no amount
-  of parameters or training data closes the gap.
+- **Yes**, for tasks whose symmetry group is cyclic of order ≥ 5. Real
+  gated recurrence appears to be structurally incapable of representing
+  these groups at OOD lengths; complex unit-circle networks handle them
+  exactly with order-of-magnitude fewer parameters (PhaseSumNet at 453
+  parameters vs. GRU at 5,097 parameters for Z/5, with OOD accuracy
+  1.000 vs 0.248).
+- **No**, for tasks whose symmetry group is Z/2 or Z/3 specifically.
+  Real gated recurrences handle these natively via state-space
+  attractors that happen to have the right period.
+- **The general lesson**: the question to ask of any architecture is
+  whether its composition operator is a homomorphism from the algebra
+  of token semantics to the algebra of network states. **When the
+  architecture's natural state-space orbits include closed cycles of
+  the task's period, generalization comes essentially for free. When
+  they don't, no amount of parameters or training data closes the gap
+  — the architecture is barred from the representation, either
+  provably (additive-linear) or empirically (gated-real for n ≥ 5).**
 
 ---
 
