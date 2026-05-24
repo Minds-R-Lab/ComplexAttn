@@ -42,3 +42,6 @@ __sync_probe.txt
 *.log
 scratch/
 tmp/
+
+# Paper draft — kept locally, not pushed to public repo
+paper/
