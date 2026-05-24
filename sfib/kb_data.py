@@ -474,6 +474,7 @@ def render_composition(pretrain_t: Triple, insert_t: Triple,
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Smoke test: generate a small KB and print summary stats + a few examples.
     kb = generate_kb(seed=0, n_pretrain=200, n_insert=50, n_compose=20,
                       n_entities_a=40, n_entities_b=15)
     print(f"Generated KB:")
@@ -487,4 +488,25 @@ if __name__ == "__main__":
     print("\n--- 5 pretrain triples (rendered) ---")
     rng = random.Random(0)
     for t in kb.pretrain_triples[:5]:
-  
+        print(f"  {render_train_example(t, rng=rng)}")
+        q, a = render_eval_query(t)
+        print(f"      Q: {q!r}  A: {a!r}")
+
+    print("\n--- 5 insert triples ---")
+    for t in kb.insert_triples[:5]:
+        print(f"  {render_train_example(t, rng=rng)}")
+        q, a = render_eval_query(t)
+        print(f"      Q: {q!r}  A: {a!r}")
+
+    print("\n--- 3 composition pairs ---")
+    for (ta, tb, qtext) in kb.compose_pairs[:3]:
+        q, a = render_composition(ta, tb, qtext)
+        print(f"  Q: {q!r}")
+        print(f"      A: {a!r}")
+        print(f"      requires PRETRAIN: {ta.as_tuple()}")
+        print(f"      requires INSERTED: {tb.as_tuple()}")
+
+    # Sanity: confirm Group A and Group B are disjoint
+    overlap = kb.group_a_entities & kb.group_b_entities
+    assert not overlap, f"Group A/B overlap: {overlap}"
+    print(f"\nGroup A/B disjoint: OK")
