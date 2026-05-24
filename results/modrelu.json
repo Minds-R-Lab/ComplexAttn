@@ -1,0 +1,190 @@
+{
+  "runs": [
+    {
+      "L": 1,
+      "seed": 0,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.85,
+      "n_params": 2340,
+      "n_effective": 2340
+    },
+    {
+      "L": 1,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.834,
+      "n_params": 2212,
+      "n_effective": 2212
+    },
+    {
+      "L": 1,
+      "seed": 1,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.846,
+      "n_params": 2340,
+      "n_effective": 2340
+    },
+    {
+      "L": 1,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.886,
+      "n_params": 2212,
+      "n_effective": 2212
+    },
+    {
+      "L": 1,
+      "seed": 2,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.782,
+      "n_params": 2340,
+      "n_effective": 2340
+    },
+    {
+      "L": 1,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.848,
+      "n_params": 2212,
+      "n_effective": 2212
+    },
+    {
+      "L": 2,
+      "seed": 0,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.764,
+      "n_params": 3632,
+      "n_effective": 3320
+    },
+    {
+      "L": 2,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.884,
+      "n_params": 3268,
+      "n_effective": 3268
+    },
+    {
+      "L": 2,
+      "seed": 1,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.756,
+      "n_params": 3632,
+      "n_effective": 3320
+    },
+    {
+      "L": 2,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.914,
+      "n_params": 3268,
+      "n_effective": 3268
+    },
+    {
+      "L": 2,
+      "seed": 2,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.836,
+      "n_params": 3632,
+      "n_effective": 3320
+    },
+    {
+      "L": 2,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.888,
+      "n_params": 3268,
+      "n_effective": 3268
+    },
+    {
+      "L": 4,
+      "seed": 0,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.72,
+      "n_params": 6216,
+      "n_effective": 5280
+    },
+    {
+      "L": 4,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.906,
+      "n_params": 5380,
+      "n_effective": 5380
+    },
+    {
+      "L": 4,
+      "seed": 1,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.724,
+      "n_params": 6216,
+      "n_effective": 5280
+    },
+    {
+      "L": 4,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.93,
+      "n_params": 5380,
+      "n_effective": 5380
+    },
+    {
+      "L": 4,
+      "seed": 2,
+      "model": "ModReLU-RMC",
+      "best_val_acc": 0.782,
+      "n_params": 6216,
+      "n_effective": 5280
+    },
+    {
+      "L": 4,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.894,
+      "n_params": 5380,
+      "n_effective": 5380
+    }
+  ],
+  "aggregated": {
+    "L": [
+      1,
+      2,
+      4
+    ],
+    "rmc_mean": [
+      0.826,
+      0.7853333333333333,
+      0.742
+    ],
+    "rmc_std": [
+      0.0381575680566778,
+      0.04406056437828879,
+      0.03469870314579498
+    ],
+    "mlp_mean": [
+      0.856,
+      0.8953333333333333,
+      0.91
+    ],
+    "mlp_std": [
+      0.026907248094147445,
+      0.01628905563049417,
+      0.018330302779823376
+    ],
+    "rmc_params": [
+      2340,
+      3632,
+      6216
+    ],
+    "rmc_eff": [
+      2340,
+      3320,
+      5280
+    ],
+    "mlp_params": [
+      2212,
+      3268,
+      5380
+    ]
+  }
+}

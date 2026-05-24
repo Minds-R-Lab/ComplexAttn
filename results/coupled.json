@@ -1,0 +1,93 @@
+{
+  "runs": [
+    {
+      "seed": 0,
+      "model": "CO-RMC",
+      "best_val_acc": 0.742,
+      "n_params": 5388
+    },
+    {
+      "seed": 0,
+      "model": "MLP-L1",
+      "best_val_acc": 0.834,
+      "n_params": 2212
+    },
+    {
+      "seed": 0,
+      "model": "MLP-L4",
+      "best_val_acc": 0.906,
+      "n_params": 5380
+    },
+    {
+      "seed": 1,
+      "model": "CO-RMC",
+      "best_val_acc": 0.716,
+      "n_params": 5388
+    },
+    {
+      "seed": 1,
+      "model": "MLP-L1",
+      "best_val_acc": 0.886,
+      "n_params": 2212
+    },
+    {
+      "seed": 1,
+      "model": "MLP-L4",
+      "best_val_acc": 0.93,
+      "n_params": 5380
+    },
+    {
+      "seed": 2,
+      "model": "CO-RMC",
+      "best_val_acc": 0.746,
+      "n_params": 5388
+    },
+    {
+      "seed": 2,
+      "model": "MLP-L1",
+      "best_val_acc": 0.848,
+      "n_params": 2212
+    },
+    {
+      "seed": 2,
+      "model": "MLP-L4",
+      "best_val_acc": 0.894,
+      "n_params": 5380
+    }
+  ],
+  "aggregated": [
+    {
+      "name": "CO-RMC",
+      "mean": 0.7346666666666666,
+      "std": 0.016289055630494167,
+      "vals": [
+        0.742,
+        0.716,
+        0.746
+      ],
+      "params": 5388
+    },
+    {
+      "name": "MLP-L1",
+      "mean": 0.856,
+      "std": 0.026907248094147445,
+      "vals": [
+        0.834,
+        0.886,
+        0.848
+      ],
+      "params": 2212
+    },
+    {
+      "name": "MLP-L4",
+      "mean": 0.91,
+      "std": 0.018330302779823376,
+      "vals": [
+        0.906,
+        0.93,
+        0.894
+      ],
+      "params": 5380
+    }
+  ]
+}

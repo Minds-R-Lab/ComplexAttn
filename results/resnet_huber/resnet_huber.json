@@ -1,0 +1,52 @@
+{
+  "runs": [
+    {
+      "seed": 0,
+      "model": "ResNet18",
+      "best_val_acc": 0.8301,
+      "epochs": 20,
+      "wall_time_s": 56.32361960411072,
+      "n_params": 11181642
+    },
+    {
+      "seed": 0,
+      "model": "ResNet18-Huber",
+      "best_val_acc": 0.8438,
+      "epochs": 20,
+      "wall_time_s": 82.74288702011108,
+      "n_params": 15904074
+    },
+    {
+      "seed": 1,
+      "model": "ResNet18",
+      "best_val_acc": 0.875,
+      "epochs": 80,
+      "wall_time_s": 236.65152764320374,
+      "n_params": 11181642
+    },
+    {
+      "seed": 1,
+      "model": "ResNet18-Huber",
+      "best_val_acc": 0.8752,
+      "epochs": 80,
+      "wall_time_s": 355.7100031375885,
+      "n_params": 15904074
+    },
+    {
+      "seed": 2,
+      "model": "ResNet18",
+      "best_val_acc": 0.8777,
+      "epochs": 80,
+      "wall_time_s": 222.85704016685486,
+      "n_params": 11181642
+    },
+    {
+      "seed": 2,
+      "model": "ResNet18-Huber",
+      "best_val_acc": 0.8808,
+      "epochs": 80,
+      "wall_time_s": 334.468896150589,
+      "n_params": 15904074
+    }
+  ]
+}

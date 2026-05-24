@@ -1,0 +1,284 @@
+{
+  "runs": [
+    {
+      "L": 2,
+      "seed": 0,
+      "model": "AbsDiff",
+      "best_val_acc": 0.888,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 0,
+      "model": "SoftAbs",
+      "best_val_acc": 0.884,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 0,
+      "model": "Huber",
+      "best_val_acc": 0.914,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.884,
+      "n_params": 3268
+    },
+    {
+      "L": 2,
+      "seed": 1,
+      "model": "AbsDiff",
+      "best_val_acc": 0.922,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 1,
+      "model": "SoftAbs",
+      "best_val_acc": 0.922,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 1,
+      "model": "Huber",
+      "best_val_acc": 0.92,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.914,
+      "n_params": 3268
+    },
+    {
+      "L": 2,
+      "seed": 2,
+      "model": "AbsDiff",
+      "best_val_acc": 0.934,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 2,
+      "model": "SoftAbs",
+      "best_val_acc": 0.944,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 2,
+      "model": "Huber",
+      "best_val_acc": 0.896,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.888,
+      "n_params": 3268
+    },
+    {
+      "L": 2,
+      "seed": 3,
+      "model": "AbsDiff",
+      "best_val_acc": 0.906,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 3,
+      "model": "SoftAbs",
+      "best_val_acc": 0.906,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 3,
+      "model": "Huber",
+      "best_val_acc": 0.91,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.908,
+      "n_params": 3268
+    },
+    {
+      "L": 2,
+      "seed": 4,
+      "model": "AbsDiff",
+      "best_val_acc": 0.916,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 4,
+      "model": "SoftAbs",
+      "best_val_acc": 0.932,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 4,
+      "model": "Huber",
+      "best_val_acc": 0.926,
+      "n_params": 3408
+    },
+    {
+      "L": 2,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.922,
+      "n_params": 3268
+    },
+    {
+      "L": 4,
+      "seed": 0,
+      "model": "AbsDiff",
+      "best_val_acc": 0.926,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 0,
+      "model": "SoftAbs",
+      "best_val_acc": 0.91,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 0,
+      "model": "Huber",
+      "best_val_acc": 0.946,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.906,
+      "n_params": 5380
+    },
+    {
+      "L": 4,
+      "seed": 1,
+      "model": "AbsDiff",
+      "best_val_acc": 0.938,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 1,
+      "model": "SoftAbs",
+      "best_val_acc": 0.934,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 1,
+      "model": "Huber",
+      "best_val_acc": 0.942,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.93,
+      "n_params": 5380
+    },
+    {
+      "L": 4,
+      "seed": 2,
+      "model": "AbsDiff",
+      "best_val_acc": 0.922,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 2,
+      "model": "SoftAbs",
+      "best_val_acc": 0.918,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 2,
+      "model": "Huber",
+      "best_val_acc": 0.932,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.894,
+      "n_params": 5380
+    },
+    {
+      "L": 4,
+      "seed": 3,
+      "model": "AbsDiff",
+      "best_val_acc": 0.932,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 3,
+      "model": "SoftAbs",
+      "best_val_acc": 0.904,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 3,
+      "model": "Huber",
+      "best_val_acc": 0.93,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.898,
+      "n_params": 5380
+    },
+    {
+      "L": 4,
+      "seed": 4,
+      "model": "AbsDiff",
+      "best_val_acc": 0.93,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 4,
+      "model": "SoftAbs",
+      "best_val_acc": 0.91,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 4,
+      "model": "Huber",
+      "best_val_acc": 0.922,
+      "n_params": 5432
+    },
+    {
+      "L": 4,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.906,
+      "n_params": 5380
+    }
+  ]
+}

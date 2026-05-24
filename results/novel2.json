@@ -1,0 +1,94 @@
+{
+  "runs": [
+    {
+      "seed": 0,
+      "model": "Sine",
+      "best_val_acc": 0.714,
+      "n_params": 2736
+    },
+    {
+      "seed": 0,
+      "model": "XOR",
+      "best_val_acc": 0.838,
+      "n_params": 3408
+    },
+    {
+      "seed": 0,
+      "model": "TopK",
+      "best_val_acc": 0.818,
+      "n_params": 2736
+    },
+    {
+      "seed": 0,
+      "model": "Range",
+      "best_val_acc": 0.902,
+      "n_params": 2256
+    },
+    {
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.884,
+      "n_params": 3268
+    },
+    {
+      "seed": 1,
+      "model": "Sine",
+      "best_val_acc": 0.822,
+      "n_params": 2736
+    },
+    {
+      "seed": 1,
+      "model": "XOR",
+      "best_val_acc": 0.892,
+      "n_params": 3408
+    },
+    {
+      "seed": 1,
+      "model": "TopK",
+      "best_val_acc": 0.826,
+      "n_params": 2736
+    },
+    {
+      "seed": 1,
+      "model": "Range",
+      "best_val_acc": 0.904,
+      "n_params": 2256
+    },
+    {
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.914,
+      "n_params": 3268
+    },
+    {
+      "seed": 2,
+      "model": "Sine",
+      "best_val_acc": 0.872,
+      "n_params": 2736
+    },
+    {
+      "seed": 2,
+      "model": "XOR",
+      "best_val_acc": 0.834,
+      "n_params": 3408
+    },
+    {
+      "seed": 2,
+      "model": "TopK",
+      "best_val_acc": 0.836,
+      "n_params": 2736
+    },
+    {
+      "seed": 2,
+      "model": "Range",
+      "best_val_acc": 0.904,
+      "n_params": 2256
+    },
+    {
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.888,
+      "n_params": 3268
+    }
+  ]
+}

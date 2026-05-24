@@ -1,0 +1,819 @@
+{
+  "runs": [
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.888,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.878,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.888,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.914,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.886,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.892,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 3,
+      "model": "MRB",
+      "best_val_acc": 0.894,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.896,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 4,
+      "model": "MRB",
+      "best_val_acc": 0.898,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.9,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 5,
+      "model": "MRB",
+      "best_val_acc": 0.878,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 5,
+      "model": "MLP",
+      "best_val_acc": 0.876,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 6,
+      "model": "MRB",
+      "best_val_acc": 0.892,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 6,
+      "model": "MLP",
+      "best_val_acc": 0.896,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 7,
+      "model": "MRB",
+      "best_val_acc": 0.89,
+      "n_params": 2396
+    },
+    {
+      "experiment": "exp1",
+      "L": 1,
+      "seed": 7,
+      "model": "MLP",
+      "best_val_acc": 0.878,
+      "n_params": 2212
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.954,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.934,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.96,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.94,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.952,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.934,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 3,
+      "model": "MRB",
+      "best_val_acc": 0.966,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.932,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 4,
+      "model": "MRB",
+      "best_val_acc": 0.96,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.956,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 5,
+      "model": "MRB",
+      "best_val_acc": 0.95,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 5,
+      "model": "MLP",
+      "best_val_acc": 0.938,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 6,
+      "model": "MRB",
+      "best_val_acc": 0.968,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 6,
+      "model": "MLP",
+      "best_val_acc": 0.938,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 7,
+      "model": "MRB",
+      "best_val_acc": 0.948,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp1",
+      "L": 2,
+      "seed": 7,
+      "model": "MLP",
+      "best_val_acc": 0.914,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.932,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.944,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.964,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.948,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.952,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.944,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 3,
+      "model": "MRB",
+      "best_val_acc": 0.958,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.946,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 4,
+      "model": "MRB",
+      "best_val_acc": 0.956,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.946,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 5,
+      "model": "MRB",
+      "best_val_acc": 0.958,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 5,
+      "model": "MLP",
+      "best_val_acc": 0.946,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 6,
+      "model": "MRB",
+      "best_val_acc": 0.954,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 6,
+      "model": "MLP",
+      "best_val_acc": 0.944,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 7,
+      "model": "MRB",
+      "best_val_acc": 0.958,
+      "n_params": 5432
+    },
+    {
+      "experiment": "exp1",
+      "L": 4,
+      "seed": 7,
+      "model": "MLP",
+      "best_val_acc": 0.94,
+      "n_params": 5380
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.64,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.624,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.7,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.62,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.624,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.628,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 3,
+      "model": "MRB",
+      "best_val_acc": 0.646,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.63,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 4,
+      "model": "MRB",
+      "best_val_acc": 0.652,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 300,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.656,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.846,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.822,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.86,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.788,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.862,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.848,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 3,
+      "model": "MRB",
+      "best_val_acc": 0.854,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.834,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 4,
+      "model": "MRB",
+      "best_val_acc": 0.842,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 1000,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.84,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.936,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.902,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.944,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.928,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.934,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.924,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 3,
+      "model": "MRB",
+      "best_val_acc": 0.936,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.92,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 4,
+      "model": "MRB",
+      "best_val_acc": 0.934,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 3000,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.952,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.974,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.982,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.978,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.982,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.98,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.978,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 3,
+      "model": "MRB",
+      "best_val_acc": 0.984,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 3,
+      "model": "MLP",
+      "best_val_acc": 0.97,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 4,
+      "model": "MRB",
+      "best_val_acc": 0.978,
+      "n_params": 3408
+    },
+    {
+      "experiment": "exp2",
+      "n": 10000,
+      "seed": 4,
+      "model": "MLP",
+      "best_val_acc": 0.984,
+      "n_params": 3268
+    },
+    {
+      "experiment": "exp3",
+      "seed": 0,
+      "model": "MRB",
+      "best_val_acc": 0.9374,
+      "n_params": 30218
+    },
+    {
+      "experiment": "exp3",
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.9314,
+      "n_params": 25450
+    },
+    {
+      "experiment": "exp3",
+      "seed": 1,
+      "model": "MRB",
+      "best_val_acc": 0.9398,
+      "n_params": 30218
+    },
+    {
+      "experiment": "exp3",
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.9342,
+      "n_params": 25450
+    },
+    {
+      "experiment": "exp3",
+      "seed": 2,
+      "model": "MRB",
+      "best_val_acc": 0.9398,
+      "n_params": 30218
+    },
+    {
+      "experiment": "exp3",
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.9312,
+      "n_params": 25450
+    }
+  ],
+  "summary": {
+    "exp1": [
+      {
+        "L": 1,
+        "mrb_mean": 0.88925,
+        "mrb_std": 0.0059461872537906945,
+        "mlp_mean": 0.89125,
+        "mlp_std": 0.0132206548357377,
+        "wins": 3,
+        "n_seeds": 8
+      },
+      {
+        "L": 2,
+        "mrb_mean": 0.9572499999999999,
+        "mrb_std": 0.007401737247816514,
+        "mlp_mean": 0.93575,
+        "mlp_std": 0.011535659000309773,
+        "wins": 8,
+        "n_seeds": 8
+      },
+      {
+        "L": 4,
+        "mrb_mean": 0.954,
+        "mrb_std": 0.009561828874675122,
+        "mlp_mean": 0.94475,
+        "mlp_std": 0.0023754698783308437,
+        "wins": 7,
+        "n_seeds": 8
+      }
+    ],
+    "exp2": [
+      {
+        "n": 300,
+        "mrb_mean": 0.6524,
+        "mrb_std": 0.02857971308463398,
+        "mlp_mean": 0.6315999999999999,
+        "mlp_std": 0.014170391667134694,
+        "wins": 3,
+        "n_seeds": 5
+      },
+      {
+        "n": 1000,
+        "mrb_mean": 0.8528,
+        "mrb_std": 0.008671793355471528,
+        "mlp_mean": 0.8263999999999999,
+        "mlp_std": 0.02346912865872951,
+        "wins": 5,
+        "n_seeds": 5
+      },
+      {
+        "n": 3000,
+        "mrb_mean": 0.9368000000000001,
+        "mrb_std": 0.004147288270665499,
+        "mlp_mean": 0.9251999999999999,
+        "mlp_std": 0.01797776404339536,
+        "wins": 4,
+        "n_seeds": 5
+      },
+      {
+        "n": 10000,
+        "mrb_mean": 0.9788,
+        "mrb_std": 0.0036331804249169933,
+        "mlp_mean": 0.9792,
+        "mlp_std": 0.0055856960175075816,
+        "wins": 2,
+        "n_seeds": 5
+      }
+    ]
+  }
+}

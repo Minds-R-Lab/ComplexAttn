@@ -1,0 +1,52 @@
+{
+  "model": "gpt2",
+  "best_retention_acc": 0.976,
+  "gate_target": 0.95,
+  "gate_passed": true,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.3264292074203492,
+      "retention_acc": 0.066,
+      "train_time_s": 44.14263892173767,
+      "eval_time_s": 1.8105461597442627
+    },
+    {
+      "epoch": 2,
+      "train_loss": 1.0121165225982667,
+      "retention_acc": 0.322,
+      "train_time_s": 43.959959983825684,
+      "eval_time_s": 1.6859142780303955
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.8434924727439881,
+      "retention_acc": 0.674,
+      "train_time_s": 44.071449279785156,
+      "eval_time_s": 1.6622536182403564
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.7337957492828369,
+      "retention_acc": 0.882,
+      "train_time_s": 44.39877915382385,
+      "eval_time_s": 1.5843298435211182
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.6732490760803223,
+      "retention_acc": 0.939,
+      "train_time_s": 44.49467396736145,
+      "eval_time_s": 2.0648932456970215
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.6408044569969177,
+      "retention_acc": 0.976,
+      "train_time_s": 44.580055475234985,
+      "eval_time_s": 1.805288553237915
+    }
+  ],
+  "checkpoint": "/mnt/c/Users/z/Dropbox/claude_work_to_share/new_nural_netwarks/sfib/checkpoints/pretrained_seed0_gpt2.pt",
+  "smoke": false
+}

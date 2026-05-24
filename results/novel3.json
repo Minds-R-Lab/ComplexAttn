@@ -1,0 +1,94 @@
+{
+  "runs": [
+    {
+      "seed": 0,
+      "model": "PairwiseDiff",
+      "best_val_acc": 0.902,
+      "n_params": 3644
+    },
+    {
+      "seed": 0,
+      "model": "TropMax",
+      "best_val_acc": 0.866,
+      "n_params": 3408
+    },
+    {
+      "seed": 0,
+      "model": "TropMin",
+      "best_val_acc": 0.878,
+      "n_params": 3408
+    },
+    {
+      "seed": 0,
+      "model": "MultiAnchor",
+      "best_val_acc": 0.87,
+      "n_params": 2816
+    },
+    {
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.884,
+      "n_params": 3268
+    },
+    {
+      "seed": 1,
+      "model": "PairwiseDiff",
+      "best_val_acc": 0.91,
+      "n_params": 3644
+    },
+    {
+      "seed": 1,
+      "model": "TropMax",
+      "best_val_acc": 0.888,
+      "n_params": 3408
+    },
+    {
+      "seed": 1,
+      "model": "TropMin",
+      "best_val_acc": 0.868,
+      "n_params": 3408
+    },
+    {
+      "seed": 1,
+      "model": "MultiAnchor",
+      "best_val_acc": 0.786,
+      "n_params": 2816
+    },
+    {
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.914,
+      "n_params": 3268
+    },
+    {
+      "seed": 2,
+      "model": "PairwiseDiff",
+      "best_val_acc": 0.868,
+      "n_params": 3644
+    },
+    {
+      "seed": 2,
+      "model": "TropMax",
+      "best_val_acc": 0.81,
+      "n_params": 3408
+    },
+    {
+      "seed": 2,
+      "model": "TropMin",
+      "best_val_acc": 0.888,
+      "n_params": 3408
+    },
+    {
+      "seed": 2,
+      "model": "MultiAnchor",
+      "best_val_acc": 0.82,
+      "n_params": 2816
+    },
+    {
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.888,
+      "n_params": 3268
+    }
+  ]
+}

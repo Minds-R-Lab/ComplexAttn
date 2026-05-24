@@ -1,0 +1,74 @@
+{
+  "epochs": 3,
+  "results": [
+    {
+      "variant": "Full RMC",
+      "ablation": "full",
+      "final_val_acc": 0.8842,
+      "final_val_loss": 0.39790767050981524,
+      "history_val_acc": [
+        0.8332,
+        0.8648,
+        0.8842
+      ],
+      "history_val_loss": [
+        0.5593787484645844,
+        0.45178510777950287,
+        0.39790767050981524
+      ]
+    },
+    {
+      "variant": "no V_MLP (harmonic only)",
+      "ablation": "no_V_MLP",
+      "final_val_acc": 0.8812,
+      "final_val_loss": 0.41299050357341766,
+      "history_val_acc": [
+        0.8354,
+        0.868,
+        0.8812
+      ],
+      "history_val_loss": [
+        0.5387063734054566,
+        0.4325021698951721,
+        0.41299050357341766
+      ]
+    },
+    {
+      "variant": "no B (MLP-only potential)",
+      "ablation": "no_B",
+      "final_val_acc": 0.893,
+      "final_val_loss": 0.3554150408029556,
+      "history_val_acc": [
+        0.8236,
+        0.8676,
+        0.893
+      ],
+      "history_val_loss": [
+        0.5695946609020233,
+        0.44383757643699645,
+        0.3554150408029556
+      ]
+    },
+    {
+      "variant": "no resonance readout",
+      "ablation": "no_resonance",
+      "final_val_acc": 0.872,
+      "final_val_loss": 0.4296233881950378,
+      "history_val_acc": [
+        0.8682,
+        0.8768,
+        0.872
+      ],
+      "history_val_loss": [
+        0.4339279876947403,
+        0.4275480898857117,
+        0.4296233881950378
+      ]
+    }
+  ],
+  "mlp_reference": {
+    "val_acc": 0.9196,
+    "val_loss": 0.256,
+    "epochs": 5
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "method": "lora_seq",
+  "ckpt": "checkpoints/pretrained_seed0_gpt2.pt",
+  "seed": 0,
+  "n_pretrain": 2000,
+  "n_insert": 500,
+  "n_compose": 200,
+  "eval_at": [
+    0,
+    1,
+    10,
+    50,
+    100,
+    250,
+    500
+  ],
+  "history": [
+    {
+      "N": 0,
+      "insertion": {
+        "n": 0,
+        "accuracy": null
+      },
+      "retention": {
+        "n": 1000,
+        "accuracy": 0.976
+      },
+      "composition": {
+        "n": 0,
+        "accuracy": null
+      },
+      "eval_time_s": 2.849976062774658
+    },
+    {
+      "N": 1,
+      "insertion": {
+        "n": 2,
+        "accuracy": 1.0
+      },
+      "retention": {
+        "n": 1000,
+        "accuracy": 0.546
+      },
+      "composition": {
+        "n": 1,
+        "accuracy": 0.0
+      },
+      "eval_time_s": 2.9663639068603516
+    },
+    {
+      "N": 10,
+      "insertion": {
+        "n": 20,
+        "accuracy": 0.1
+      },
+      "retention": {
+        "n": 1000,
+        "accuracy": 0.001
+      },
+      "composition": {
+        "n": 7,
+        "accuracy": 0.0
+      },
+      "eval_time_s": 1.8134186267852783
+    },
+    {
+      "N": 50,
+      "insertion": {
+        "n": 100,
+        "accuracy": 0.02
+      },
+      "retention": {
+        "n": 1000,
+        "accuracy": 0.002
+      },
+      "composition": {
+        "n": 33,
+        "accuracy": 0.0
+      },
+      "eval_time_s": 1.9009850025177002
+    },
+    {
+      "N": 100,
+      "insertion": {
+        "n": 200,
+        "accuracy": 0.01
+      },
+      "retention": {
+        "n": 1000,
+        "accuracy": 0.0
+      },
+      "composition": {
+        "n": 62,
+        "accuracy": 0.0
+      },
+      "eval_time_s": 2.152102470397949
+    },
+    {
+      "N": 250,
+      "insertion": {
+        "n": 500,
+        "accuracy": 0.008
+      },
+      "retention": {
+        "n": 1000,
+        "accuracy": 0.0
+      },
+      "composition": {
+        "n": 165,
+        "accuracy": 0.0
+      },
+      "eval_time_s": 8.048940896987915
+    },
+    {
+      "N": 500,
+      "insertion": {
+        "n": 1000,
+        "accuracy": 0.008
+      },
+      "retention": {
+        "n": 1000,
+        "accuracy": 0.004
+      },
+      "composition": {
+        "n": 200,
+        "accuracy": 0.0
+      },
+      "eval_time_s": 2.216338872909546
+    }
+  ]
+}

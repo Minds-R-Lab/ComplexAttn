@@ -1,0 +1,109 @@
+{
+  "overall_retention": 0.883,
+  "kb_audit": {
+    "n_unique_sr_pairs": 1717,
+    "n_ambig_sr_pairs": 241,
+    "n_ambig_triples": 522,
+    "frac_ambig": 0.261,
+    "per_rel_ambig": {
+      "mayor_of": {
+        "amb": 0,
+        "tot": 250
+      },
+      "occupation_of": {
+        "amb": 39,
+        "tot": 186
+      },
+      "born_in": {
+        "amb": 58,
+        "tot": 237
+      },
+      "lives_in": {
+        "amb": 217,
+        "tot": 449
+      },
+      "studied_at": {
+        "amb": 49,
+        "tot": 209
+      },
+      "spouse_of": {
+        "amb": 62,
+        "tot": 238
+      },
+      "allied_with": {
+        "amb": 40,
+        "tot": 217
+      },
+      "owns_a": {
+        "amb": 57,
+        "tot": 212
+      }
+    }
+  },
+  "per_relation": {
+    "owns_a": {
+      "correct": 95,
+      "total": 108,
+      "acc": 0.8796296296296297
+    },
+    "allied_with": {
+      "correct": 94,
+      "total": 106,
+      "acc": 0.8867924528301887
+    },
+    "lives_in": {
+      "correct": 166,
+      "total": 216,
+      "acc": 0.7685185185185185
+    },
+    "studied_at": {
+      "correct": 98,
+      "total": 112,
+      "acc": 0.875
+    },
+    "spouse_of": {
+      "correct": 100,
+      "total": 104,
+      "acc": 0.9615384615384616
+    },
+    "mayor_of": {
+      "correct": 122,
+      "total": 122,
+      "acc": 1.0
+    },
+    "occupation_of": {
+      "correct": 90,
+      "total": 100,
+      "acc": 0.9
+    },
+    "born_in": {
+      "correct": 118,
+      "total": 132,
+      "acc": 0.8939393939393939
+    }
+  },
+  "per_template": {
+    "0": {
+      "correct": 442,
+      "total": 500,
+      "acc": 0.884
+    },
+    "1": {
+      "correct": 441,
+      "total": 500,
+      "acc": 0.882
+    }
+  },
+  "ambig_conditional": {
+    "unambig": {
+      "correct": 742,
+      "total": 742,
+      "acc": 1.0
+    },
+    "ambig": {
+      "correct": 141,
+      "total": 258,
+      "acc": 0.5465116279069767
+    }
+  }
+}

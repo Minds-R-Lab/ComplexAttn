@@ -1,0 +1,33 @@
+{
+  "energy": {
+    "mean_relative_drift": 6.177491448511319e-05,
+    "max_relative_drift": 0.0001574974157847464,
+    "final_relative_drift": 0.0001574974157847464
+  },
+  "reversibility": {
+    "mean_position_error": 3.1858832016951055e-08,
+    "max_position_error": 5.141495762472914e-08,
+    "mean_momentum_error": 4.836204325897597e-08
+  },
+  "gradient_flow": {
+    "loss": 2.401881217956543,
+    "params_with_grad": 11,
+    "params_total": 11,
+    "min_grad_norm": 3.2770494726719335e-06,
+    "max_grad_norm": 1.5294798612594604,
+    "params_missing_grad": 0,
+    "param_grad_norms": {
+      "encoder.weight": 1.5294798612594604,
+      "encoder.bias": 0.04257892444729805,
+      "rmc.L_raw": 0.029489241540431976,
+      "rmc.B_raw": 0.01331346482038498,
+      "rmc.psi": 0.1669100821018219,
+      "rmc.omega": 0.015391821041703224,
+      "rmc.V_mlp.0.weight": 3.581300188670866e-05,
+      "rmc.V_mlp.0.bias": 3.2770494726719335e-06,
+      "rmc.V_mlp.2.weight": 0.0009500421001575887,
+      "head.weight": 0.549504280090332,
+      "head.bias": 0.40580302476882935
+    }
+  }
+}

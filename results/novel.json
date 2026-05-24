@@ -1,0 +1,94 @@
+{
+  "runs": [
+    {
+      "seed": 0,
+      "model": "AbsDiff",
+      "best_val_acc": 0.888,
+      "n_params": 3408
+    },
+    {
+      "seed": 0,
+      "model": "Antisym",
+      "best_val_acc": 0.632,
+      "n_params": 2224
+    },
+    {
+      "seed": 0,
+      "model": "Cubic",
+      "best_val_acc": 0.83,
+      "n_params": 2736
+    },
+    {
+      "seed": 0,
+      "model": "SqDiff",
+      "best_val_acc": 0.902,
+      "n_params": 3408
+    },
+    {
+      "seed": 0,
+      "model": "MLP",
+      "best_val_acc": 0.884,
+      "n_params": 3268
+    },
+    {
+      "seed": 1,
+      "model": "AbsDiff",
+      "best_val_acc": 0.922,
+      "n_params": 3408
+    },
+    {
+      "seed": 1,
+      "model": "Antisym",
+      "best_val_acc": 0.676,
+      "n_params": 2224
+    },
+    {
+      "seed": 1,
+      "model": "Cubic",
+      "best_val_acc": 0.836,
+      "n_params": 2736
+    },
+    {
+      "seed": 1,
+      "model": "SqDiff",
+      "best_val_acc": 0.928,
+      "n_params": 3408
+    },
+    {
+      "seed": 1,
+      "model": "MLP",
+      "best_val_acc": 0.914,
+      "n_params": 3268
+    },
+    {
+      "seed": 2,
+      "model": "AbsDiff",
+      "best_val_acc": 0.934,
+      "n_params": 3408
+    },
+    {
+      "seed": 2,
+      "model": "Antisym",
+      "best_val_acc": 0.668,
+      "n_params": 2224
+    },
+    {
+      "seed": 2,
+      "model": "Cubic",
+      "best_val_acc": 0.876,
+      "n_params": 2736
+    },
+    {
+      "seed": 2,
+      "model": "SqDiff",
+      "best_val_acc": 0.916,
+      "n_params": 3408
+    },
+    {
+      "seed": 2,
+      "model": "MLP",
+      "best_val_acc": 0.888,
+      "n_params": 3268
+    }
+  ]
+}

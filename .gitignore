@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Datasets (downloaded by torchvision; users re-download on first run)
+data/
+sfib/data/
+
+# Large model checkpoints (GPT-2 weights, multi-hundred MB each)
+sfib/checkpoints/
+*.bin
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Dropbox sync probe (internal, not part of the project)
+__sync_probe.txt
+
+# Local logs / scratch
+*.log
+scratch/
+tmp/
