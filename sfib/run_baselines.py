@@ -593,14 +593,12 @@ class MLPWithMemory(nn.Module):
     def forward(self, x):
         h, base_out = self._compute_intermediate_and_out(x)
 
-        # Memory path: fire only at LAST POSITION during PREFILL (slen > 1).
-        # During incremental decoding (model.generate uses KV cache; new-token
-        # forward passes have slen=1), the wrapped MLP would otherwise fire at
-        # every generated token's position, double-perturbing the model out of
-        # distribution. By skipping firing when slen==1, the KV cache from
-        # prefill carries our perturbation forward via attention without
-        # re-injecting it on new tokens.
-        if self.n_slots > 0 and h.shape[1] > 1:
+        # Memory path: fire at LAST POSITION of each forward pass. With
+        # multi-position v* (one slot per target token position), this
+        # fires correctly at the last prompt position during prefill AND
+        # at each newly generated token during incremental decoding. The
+        # slot whose key matches a given position's h fires there.
+        if self.n_slots > 0:
             bsz, slen, _ = h.shape
             last_pos = slen - 1
             h_last = h[:, last_pos, :]
@@ -640,7 +638,7 @@ class AddressableMemoryMethod(MEMITMethod):
     def __init__(self, layer_idx: int = 5, n_v_steps: int = 20,
                  v_lr: float = 0.5, v_weight_decay: float = 0.5,
                  v_norm_constraint: float = 4.0,
-                 sim_threshold: float = 0.7, max_slots: int = 4000,
+                 sim_threshold: float = 0.7, max_slots: int = 8000,
                  rewrite_form: str = "qa", n_templates: int = 2):
         super().__init__(layer_idx=layer_idx, n_v_steps=n_v_steps,
                           v_lr=v_lr, v_weight_decay=v_weight_decay,
@@ -698,26 +696,35 @@ class AddressableMemoryMethod(MEMITMethod):
               f"n_templates: {self.n_templates}")
 
     def _insert_one(self, triple: Triple, q_idx: int) -> None:
-        """Insert a single (key, delta_v) slot for `triple` using rewrite
-        template q_idx. Each call adds exactly one slot."""
+        """Insert ONE template's worth of slots for `triple`. Multi-position
+        v* optimization: stores one (k, delta_v) slot per target token position
+        in the prompt's continuation. At eval, slot 0 fires on the last prompt
+        position (predicting target token 0), slot 1 fires on the position
+        of generated token 0 (predicting target token 1), etc.
+
+        Total slots added per call = target_len (typically 1-4)."""
         prompt, target = self._build_rewrite(triple, q_idx=q_idx)
         prompt_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(DEVICE)
         target_ids = self.tokenizer.encode(target, return_tensors="pt").to(DEVICE)
         full_ids = torch.cat([prompt_ids, target_ids], dim=1)
 
-        # Use the LAST PROMPT POSITION. The MLPWithMemory wrapper fires at the
-        # last position of any input, so during eval the slot retrieval and the
-        # delta_v we optimize here land at the SAME position.
-        last_pos = prompt_ids.shape[1] - 1
+        P = prompt_ids.shape[1]          # prompt length
+        T = target_ids.shape[1]          # target length
+        # Predicting positions: P-1 predicts target[0]; P predicts target[1]; ...
+        # P+T-2 predicts target[T-1]. T positions total.
+        positions = list(range(P - 1, P + T - 1))
 
-        # --- Capture k* (from base c_proj input) and v_orig (wrapped MLP output) ---
-        captured: dict[str, torch.Tensor] = {}
+        # --- Capture k and v_orig at each predicting position ---
+        captured_k: dict[int, torch.Tensor] = {}
+        captured_v: dict[int, torch.Tensor] = {}
 
         def hook_k(module, inputs, output):
-            captured["k"] = inputs[0][0, last_pos].detach().clone()
+            for pos in positions:
+                captured_k[pos] = inputs[0][0, pos].detach().clone()
 
         def hook_v(module, inputs, output):
-            captured["v"] = output[0, last_pos].detach().clone()
+            for pos in positions:
+                captured_v[pos] = output[0, pos].detach().clone()
 
         h_k = self.down_proj.register_forward_hook(hook_k)
         h_v = self.memory_mlp.register_forward_hook(hook_v)
@@ -726,16 +733,16 @@ class AddressableMemoryMethod(MEMITMethod):
             _ = self.model(full_ids)
         h_k.remove()
         h_v.remove()
-        k_star = captured["k"]
-        v_orig = captured["v"]
 
-        # --- Optimize delta_v ---
-        delta_v = torch.zeros_like(v_orig, requires_grad=True)
-        opt = torch.optim.Adam([delta_v], lr=self.v_lr)
+        # --- Optimize a delta_v per position, jointly minimizing CE ---
+        delta_vs = {pos: torch.zeros_like(captured_v[pos], requires_grad=True)
+                     for pos in positions}
+        opt = torch.optim.Adam(list(delta_vs.values()), lr=self.v_lr)
 
         def inject_hook(module, inputs, output):
             out = output.clone()
-            out[0, last_pos] = out[0, last_pos] + delta_v
+            for pos, dv in delta_vs.items():
+                out[0, pos] = out[0, pos] + dv
             return out
 
         labels = full_ids.clone()
@@ -747,20 +754,24 @@ class AddressableMemoryMethod(MEMITMethod):
                 opt.zero_grad()
                 out = self.model(input_ids=full_ids, labels=labels)
                 ce = out.loss
-                reg = self.v_weight_decay * (delta_v.norm() ** 2) / (
-                    v_orig.norm() ** 2 + 1e-8)
+                reg = sum(self.v_weight_decay * (dv.norm() ** 2) / (
+                          captured_v[pos].norm() ** 2 + 1e-8)
+                          for pos, dv in delta_vs.items())
                 loss = ce + reg
                 loss.backward()
                 opt.step()
                 with torch.no_grad():
-                    max_norm = self.v_norm_constraint * v_orig.norm().item()
-                    cur_norm = delta_v.norm().item()
-                    if cur_norm > max_norm and cur_norm > 0:
-                        delta_v.mul_(max_norm / cur_norm)
+                    for pos, dv in delta_vs.items():
+                        max_norm = self.v_norm_constraint * captured_v[pos].norm().item()
+                        cur_norm = dv.norm().item()
+                        if cur_norm > max_norm and cur_norm > 0:
+                            dv.mul_(max_norm / cur_norm)
         finally:
             h_inject.remove()
 
-        self.memory_mlp.add_slot(k_star, delta_v.detach())
+        # --- Store one slot per predicting position ---
+        for pos in positions:
+            self.memory_mlp.add_slot(captured_k[pos], delta_vs[pos].detach())
 
     def insert(self, triple: Triple) -> None:
         """Multi-prompt insertion: store one slot per query template.
@@ -875,7 +886,7 @@ def main():
                     help="learning rate for v* optimization (memit/addressable_mem)")
     ap.add_argument("--mem_sim_threshold", type=float, default=0.7,
                     help="cosine-similarity threshold for memory retrieval (addressable_mem)")
-    ap.add_argument("--mem_max_slots", type=int, default=4000,
+    ap.add_argument("--mem_max_slots", type=int, default=8000,
                     help="max memory slots to pre-allocate (addressable_mem)")
     ap.add_argument("--mem_rewrite_form", default="qa", choices=["qa", "statement"],
                     help="rewrite prompt form (addressable_mem)")
