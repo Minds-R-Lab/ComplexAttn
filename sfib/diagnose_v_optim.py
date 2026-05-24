@@ -126,13 +126,13 @@ def main():
     # Now test: with delta_v applied at last_pos, does the model predict the target?
     print(f"\n[diag] testing: do greedy generation with delta_v applied at last_pos")
     def test_hook(module, inputs, output):
+        # Fire ONLY during prefill (seq_len > 1), not on each incremental
+        # decoding step. This matches MLPWithMemory's updated behavior and
+        # avoids double-perturbation on multi-token generation.
         out = output.clone()
-        # Use dynamic position because generate() uses KV cache:
-        # prefill pass sees prompt_len tokens, then each new step sees length-1.
-        # We fire at the last position of whatever the wrapped MLP sees, which
-        # matches MLPWithMemory's behavior during actual eval.
-        pos = out.shape[1] - 1
-        out[0, pos] = out[0, pos] + delta_v.detach()
+        if out.shape[1] > 1:
+            pos = out.shape[1] - 1
+            out[0, pos] = out[0, pos] + delta_v.detach()
         return out
     h_test = mlp.register_forward_hook(test_hook)
     try:

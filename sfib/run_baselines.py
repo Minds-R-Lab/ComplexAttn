@@ -593,9 +593,14 @@ class MLPWithMemory(nn.Module):
     def forward(self, x):
         h, base_out = self._compute_intermediate_and_out(x)
 
-        # Memory path: fire only at LAST POSITION (where next-token prediction
-        # is made and where the v* optimization was tuned).
-        if self.n_slots > 0:
+        # Memory path: fire only at LAST POSITION during PREFILL (slen > 1).
+        # During incremental decoding (model.generate uses KV cache; new-token
+        # forward passes have slen=1), the wrapped MLP would otherwise fire at
+        # every generated token's position, double-perturbing the model out of
+        # distribution. By skipping firing when slen==1, the KV cache from
+        # prefill carries our perturbation forward via attention without
+        # re-injecting it on new tokens.
+        if self.n_slots > 0 and h.shape[1] > 1:
             bsz, slen, _ = h.shape
             last_pos = slen - 1
             h_last = h[:, last_pos, :]
