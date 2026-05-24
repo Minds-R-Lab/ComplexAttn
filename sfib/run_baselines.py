@@ -905,6 +905,7 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.float32).to(DEVICE)
+    model = model.float()  # belt-and-suspenders: force fp32 (some models default to bf16)
     ckpt = torch.load(args.ckpt, map_location=DEVICE, weights_only=False)
     sd = ckpt["model_state"] if isinstance(ckpt, dict) and "model_state" in ckpt else ckpt
     model.load_state_dict(sd)

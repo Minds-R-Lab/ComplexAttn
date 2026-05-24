@@ -167,6 +167,7 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.float32).to(DEVICE)
+    model = model.float()  # belt-and-suspenders: force fp32 (some models default to bf16)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[pretrain] params: {n_params:,} ({n_params/1e6:.1f}M)")
 
