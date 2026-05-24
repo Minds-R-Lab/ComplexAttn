@@ -1,6 +1,11 @@
-"""run_baselines.py — SFIB insertion-stream baselines.
+"""run_baselines.py — SFIB insertion-stream baselines (multi-architecture).
 
-Each baseline takes the pretrained backbone (sfib/checkpoints/pretrained_seed0_gpt2.pt)
+Supports any HuggingFace decoder LM whose layers expose either a GPT-2-style
+vanilla MLP (c_fc / c_proj via Conv1D) or a SwiGLU MLP (gate_proj / up_proj /
+down_proj via nn.Linear). Tested on GPT-2 family, Qwen2/Qwen2.5, Llama-3.x,
+TinyLlama. Detection and family-specific dispatch live in sfib/model_adapter.py.
+
+Each baseline takes a pretrained backbone (e.g. sfib/checkpoints/pretrained_seed0_gpt2.pt)
 and processes the insertion stream (kb.insert_triples) one fact at a time. At a
 sequence of pre-registered checkpoints N ∈ {0, 1, 10, 50, 100, 250, 500}, we
 measure three quantities:
@@ -51,7 +56,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from model_adapter import ModelAdapter
 
 from kb_data import (
     generate_kb, render_train_example, render_eval_query, render_composition,
@@ -236,12 +242,28 @@ class SequentialFTMethod(Method):
 
 import torch.nn as nn
 
-class Conv1DWithLoRA(nn.Module):
+class LoRAAdapterWrapper(nn.Module):
+    """Wraps either a GPT-2 Conv1D or an nn.Linear with a low-rank adapter.
+
+    For Conv1D (weight shape: (in, out), forward: x @ W + b):
+        delta_out = (x @ A) @ B * scaling   where A: (in, r), B: (r, out)
+    For nn.Linear (weight shape: (out, in), forward: x @ W.T + b):
+        delta_out = (x @ A) @ B * scaling   where A: (in, r), B: (r, out)
+    Either way the LoRA contribution is x -> A -> B with the same shapes
+    relative to in/out features; we just need to read in/out from the right axis.
+    """
+
     def __init__(self, base, r: int = 4, alpha: float = 8.0):
         super().__init__()
-        self.base = base                       # frozen Conv1D
-        in_features = base.weight.shape[0]
-        out_features = base.weight.shape[1]
+        self.base = base
+        # Detect Conv1D vs Linear by weight shape semantics:
+        from transformers.pytorch_utils import Conv1D
+        if isinstance(base, Conv1D):
+            in_features = base.weight.shape[0]
+            out_features = base.weight.shape[1]
+        else:  # nn.Linear
+            out_features = base.weight.shape[0]
+            in_features = base.weight.shape[1]
         self.lora_A = nn.Parameter(torch.randn(in_features, r) * 0.01)
         self.lora_B = nn.Parameter(torch.zeros(r, out_features))
         self.scaling = alpha / r
@@ -252,29 +274,34 @@ class Conv1DWithLoRA(nn.Module):
         return base_out + lora_out
 
 
+# Backwards-compatible alias (older docstrings reference Conv1DWithLoRA)
+Conv1DWithLoRA = LoRAAdapterWrapper
+
+
 def _inject_lora(model, target_substrings: tuple[str, ...], r: int = 4,
-                  alpha: float = 8.0) -> int:
-    """Replace every Conv1D submodule whose name contains any of the given
-    substrings with a Conv1DWithLoRA wrapper. Returns count of layers wrapped."""
+                  alpha: float = 8.0,
+                  layer_classes: tuple[type, ...] | None = None) -> int:
+    """Replace every submodule (of the given layer_classes) whose name contains
+    any of the given substrings with a LoRAAdapterWrapper. Returns count.
+    layer_classes defaults to (Conv1D, nn.Linear) so both GPT-2 and SwiGLU
+    architectures are covered."""
     from transformers.pytorch_utils import Conv1D
+    if layer_classes is None:
+        layer_classes = (Conv1D, nn.Linear)
     count = 0
-    # First freeze everything
     for p in model.parameters():
         p.requires_grad = False
-    # Walk the module tree and patch
     for name, module in list(model.named_modules()):
         for child_name, child in list(module.named_children()):
             full_name = f"{name}.{child_name}" if name else child_name
-            if not isinstance(child, Conv1D):
+            if not isinstance(child, layer_classes):
                 continue
             if not any(s in full_name for s in target_substrings):
                 continue
-            wrapped = Conv1DWithLoRA(child, r=r, alpha=alpha)
-            # Move to same device/dtype as base
+            wrapped = LoRAAdapterWrapper(child, r=r, alpha=alpha)
             wrapped = wrapped.to(child.weight.device).to(child.weight.dtype)
             setattr(module, child_name, wrapped)
             count += 1
-    # Make LoRA params trainable
     for n, p in model.named_parameters():
         if "lora_A" in n or "lora_B" in n:
             p.requires_grad = True
@@ -293,27 +320,32 @@ class LoRASequentialMethod(SequentialFTMethod):
 
     def __init__(self, lr: float = 1e-4, n_steps: int = 5, rank: int = 4,
                  alpha: float = 8.0,
-                 target_substrings: tuple[str, ...] = ("c_attn", "c_fc", "c_proj")):
+                 target_substrings: tuple[str, ...] | None = None):
         super().__init__(lr=lr, n_steps=n_steps)
         self.rank = rank
         self.alpha = alpha
+        # If None, derived from the model family at setup time via ModelAdapter
         self.target_substrings = target_substrings
 
     def setup(self, model, tokenizer, kb):
-        # Inject LoRA BEFORE creating optimizer
-        n_wrapped = _inject_lora(model, self.target_substrings,
-                                   r=self.rank, alpha=self.alpha)
+        adapter = ModelAdapter.from_model(model)
+        target_substrings = self.target_substrings or adapter.lora_target_substrings()
+        layer_classes = adapter.lora_layer_classes()
+        n_wrapped = _inject_lora(model, target_substrings,
+                                  r=self.rank, alpha=self.alpha,
+                                  layer_classes=layer_classes)
         lora_params = [p for n, p in model.named_parameters()
                         if ("lora_A" in n or "lora_B" in n)]
         n_lora_params = sum(p.numel() for p in lora_params)
         n_total_params = sum(p.numel() for p in model.parameters())
-        print(f"[baseline] LoRA injected into {n_wrapped} Conv1D layers "
-              f"(target: {self.target_substrings})")
+        print(f"[baseline] LoRA injected into {n_wrapped} layers ({adapter.family} family; "
+              f"targets: {target_substrings})")
         print(f"[baseline] LoRA trainable params: {n_lora_params:,} / "
               f"{n_total_params:,} ({100*n_lora_params/n_total_params:.2f}%)")
         self.model = model
         self.tokenizer = tokenizer
         self.kb = kb
+        self.adapter = adapter
         self.optimizer = torch.optim.AdamW(
             lora_params, lr=self.lr, weight_decay=0.0
         )
@@ -358,16 +390,17 @@ class MEMITMethod(Method):
 
     def setup(self, model, tokenizer, kb):
         super().setup(model, tokenizer, kb)
-        n_layers = len(model.transformer.h)
-        if not (0 <= self.layer_idx < n_layers):
+        self.adapter = ModelAdapter.from_model(model)
+        if not (0 <= self.layer_idx < self.adapter.n_layers):
             raise ValueError(
-                f"layer_idx={self.layer_idx} out of range for model with {n_layers} layers")
-        self.mlp = model.transformer.h[self.layer_idx].mlp
-        # Freeze all weights — we'll modify c_proj.weight by hand
+                f"layer_idx={self.layer_idx} out of range for model with {self.adapter.n_layers} layers")
+        self.mlp = self.adapter.get_mlp(self.layer_idx)
+        self.down_proj = self.adapter.get_down_proj(self.mlp)
+        # Freeze all weights — we'll modify down_proj.weight by hand
         for p in model.parameters():
             p.requires_grad = False
-        print(f"[baseline] MEMIT editing MLP of layer {self.layer_idx}; "
-              f"c_proj weight shape: {tuple(self.mlp.c_proj.weight.shape)}")
+        print(f"[baseline] MEMIT editing MLP of layer {self.layer_idx} ({self.adapter.family} family); "
+              f"down_proj weight shape: {tuple(self.down_proj.weight.shape)}")
 
     def _build_rewrite(self, triple: Triple) -> tuple[str, str]:
         """Build (prompt, target) such that prompt ends right before the object
@@ -416,14 +449,14 @@ class MEMITMethod(Method):
         captured: dict[str, torch.Tensor] = {}
 
         def hook_k(module, inputs, output):
-            # inputs[0] is c_proj's input tensor, shape (batch, seq, d_mlp)
+            # inputs[0] is down_proj's input tensor, shape (batch, seq, intermediate)
             captured["k"] = inputs[0][0, last_subj_pos].detach().clone()
 
         def hook_v(module, inputs, output):
-            # output of the MLP module, shape (batch, seq, d_model)
+            # output of the MLP module, shape (batch, seq, hidden)
             captured["v"] = output[0, last_subj_pos].detach().clone()
 
-        h_k = self.mlp.c_proj.register_forward_hook(hook_k)
+        h_k = self.down_proj.register_forward_hook(hook_k)
         h_v = self.mlp.register_forward_hook(hook_v)
         self.model.eval()
         with torch.no_grad():
@@ -470,19 +503,21 @@ class MEMITMethod(Method):
 
         v_star = v_orig + delta_v.detach()
 
-        # --- Step 3: Apply rank-one update to c_proj.weight ---
-        # Conv1D: forward is x @ W + b; W has shape (in, out) = (d_mlp, d_model)
-        # Currently W k_star + b gives some output y; we want it to equal v_star.
-        # The rank-one update that achieves this with minimum Frobenius norm:
-        #   W_new = W + outer(k_star, residual) / ||k_star||^2
-        # where residual = v_star - (W k_star + b)
-        W = self.mlp.c_proj.weight.data        # (d_mlp, d_model)
-        b = self.mlp.c_proj.bias.data          # (d_model,)
-        current_v = k_star @ W + b             # (d_model,)
-        residual = v_star - current_v          # (d_model,)
-        norm_sq = (k_star.pow(2).sum().item() + 1e-8)
-        delta_W = torch.outer(k_star, residual) / norm_sq  # (d_mlp, d_model)
-        W.add_(delta_W)
+        # --- Step 3: Apply rank-one update to down_proj.weight via adapter ---
+        # Compute the current output of down_proj at k_star, then solve for the
+        # rank-one delta that drives it to v_star. The adapter handles the
+        # Conv1D-vs-Linear weight layout difference.
+        W = self.down_proj.weight.data
+        b = self.down_proj.bias.data if self.down_proj.bias is not None else None
+        # Current output: family-specific because Conv1D is x @ W, Linear is x @ W.T
+        if self.adapter.family == "gpt2":
+            current_v = k_star @ W
+        else:
+            current_v = k_star @ W.T
+        if b is not None:
+            current_v = current_v + b
+        residual = v_star - current_v
+        self.adapter.apply_rank_one_update(self.down_proj, k_star, residual)
 
 
 # ---------------------------------------------------------------------------
@@ -505,63 +540,78 @@ class MEMITMethod(Method):
 import torch.nn.functional as F
 
 class MLPWithMemory(nn.Module):
-    """Drop-in replacement for a GPT-2 MLP module. Wraps the original MLP and
-    adds an external (K, V) memory bank consulted on each forward pass.
+    """Family-aware drop-in replacement for a transformer block's MLP module.
 
-    Forward:
-        h = act(c_fc(x))                  # standard MLP intermediate
-        base_out = c_proj(h)              # standard MLP output, BEFORE dropout
-        if memory has slots:
-            sims = cos(h, K)              # (batch, seq, n_slots) cosine sims
-            best_sim, best_idx = sims.max # top-1 selection
-            gate = (best_sim > threshold) # binary mask
-            mem_out = V[best_idx] * gate
-            out = base_out + mem_out
-        else:
-            out = base_out
-        return dropout(out)
+    Wraps the original MLP and adds an external (K, V) memory bank consulted
+    on each forward pass. Supports two MLP families:
+
+    GPT-2 vanilla MLP:
+        h = act(c_fc(x))                        # intermediate, (..., d_mlp)
+        base_out = c_proj(h)                    # (..., d_model)
+        + optional final dropout
+
+    SwiGLU (Llama/Qwen/Mistral):
+        gate = act_fn(gate_proj(x))
+        h = gate * up_proj(x)                   # intermediate, (..., d_mlp)
+        base_out = down_proj(h)                 # (..., d_model)
+        (no final dropout)
+
+    Memory contribution: fire ONLY at the last position of each input sequence.
+    Top-1 hard selection via cosine similarity, gated by sim_threshold.
     """
 
-    def __init__(self, base_mlp, n_slots_max: int = 2000,
-                 d_mlp: int = 3072, d_model: int = 768,
+    def __init__(self, base_mlp, family: str, n_slots_max: int = 2000,
+                 intermediate_size: int = 3072, hidden_size: int = 768,
                  sim_threshold: float = 0.7):
         super().__init__()
         self.base_mlp = base_mlp
-        self.register_buffer("K", torch.zeros(n_slots_max, d_mlp))
-        self.register_buffer("V", torch.zeros(n_slots_max, d_model))
+        if family not in ("gpt2", "swiglu"):
+            raise ValueError(f"family must be 'gpt2' or 'swiglu', got {family!r}")
+        self.family = family
+        self.register_buffer("K", torch.zeros(n_slots_max, intermediate_size))
+        self.register_buffer("V", torch.zeros(n_slots_max, hidden_size))
         self.n_slots = 0
         self.sim_threshold = sim_threshold
 
-    def forward(self, x):
-        # Standard MLP path
-        h = self.base_mlp.c_fc(x)
-        h = self.base_mlp.act(h)                # (batch, seq, d_mlp)
-        base_out = self.base_mlp.c_proj(h)       # (batch, seq, d_model)
+    def _compute_intermediate_and_out(self, x):
+        """Run the family-appropriate MLP path. Returns (intermediate, base_out)."""
+        if self.family == "gpt2":
+            h = self.base_mlp.c_fc(x)
+            h = self.base_mlp.act(h)
+            return h, self.base_mlp.c_proj(h)
+        # swiglu
+        gate = self.base_mlp.act_fn(self.base_mlp.gate_proj(x))
+        up = self.base_mlp.up_proj(x)
+        h = gate * up
+        return h, self.base_mlp.down_proj(h)
 
-        # Memory path: fire only at the LAST POSITION of the input sequence.
-        # This avoids cross-slot pollution at upstream positions (which was
-        # capping insertion at ~28% in the cosine-everywhere version). The
-        # last position is where the next-token prediction is made, which is
-        # the position the v* optimization was tuned for during insertion.
+    def _maybe_dropout(self, out):
+        if self.family == "gpt2" and hasattr(self.base_mlp, "dropout"):
+            return self.base_mlp.dropout(out)
+        return out
+
+    def forward(self, x):
+        h, base_out = self._compute_intermediate_and_out(x)
+
+        # Memory path: fire only at LAST POSITION (where next-token prediction
+        # is made and where the v* optimization was tuned).
         if self.n_slots > 0:
             bsz, slen, _ = h.shape
             last_pos = slen - 1
-            h_last = h[:, last_pos, :]                       # (bsz, d_mlp)
-            K_active = self.K[:self.n_slots]                 # (n, d_mlp)
-            V_active = self.V[:self.n_slots]                 # (n, d_model)
+            h_last = h[:, last_pos, :]
+            K_active = self.K[:self.n_slots]
+            V_active = self.V[:self.n_slots]
             h_norm = F.normalize(h_last, dim=-1)
             K_norm = F.normalize(K_active, dim=-1)
-            sims = h_norm @ K_norm.T                          # (bsz, n)
-            best_sim, best_idx = sims.max(dim=-1)             # each (bsz,)
-            gate = (best_sim > self.sim_threshold).to(base_out.dtype)  # (bsz,)
-            retrieved = V_active[best_idx]                    # (bsz, d_model)
-            # Build a contribution tensor that is zero everywhere except
-            # the last position. Avoids in-place ops on the forward output.
+            sims = h_norm @ K_norm.T
+            best_sim, best_idx = sims.max(dim=-1)
+            gate = (best_sim > self.sim_threshold).to(base_out.dtype)
+            retrieved = V_active[best_idx]
             contribution = torch.zeros_like(base_out)
             contribution[:, last_pos, :] = retrieved * gate.unsqueeze(-1)
             base_out = base_out + contribution
 
-        return self.base_mlp.dropout(base_out)
+        return self._maybe_dropout(base_out)
 
     def add_slot(self, k: torch.Tensor, v: torch.Tensor) -> None:
         if self.n_slots >= self.K.shape[0]:
@@ -614,28 +664,33 @@ class AddressableMemoryMethod(MEMITMethod):
         return super()._build_rewrite(triple)
 
     def setup(self, model, tokenizer, kb):
+        # super().setup populates self.adapter, self.mlp (= MLP at layer_idx),
+        # self.down_proj, and freezes parameters.
         super().setup(model, tokenizer, kb)
-        # Replace the target MLP with the memory-wrapped version
-        block = model.transformer.h[self.layer_idx]
-        original_mlp = block.mlp
-        # GPT-2 Conv1D shapes: c_fc.weight (d_model, d_mlp), c_proj.weight (d_mlp, d_model)
-        d_model = original_mlp.c_fc.weight.shape[0]
-        d_mlp = original_mlp.c_fc.weight.shape[1]
+        adapter = self.adapter
+        # Replace the target MLP with the memory-wrapped version.
+        original_mlp = adapter.get_mlp(self.layer_idx)
+        # Sniff a sample weight's dtype to keep K, V matched
+        ref_weight = self.down_proj.weight
         wrapped = MLPWithMemory(
-            original_mlp, n_slots_max=self.max_slots,
-            d_mlp=d_mlp, d_model=d_model, sim_threshold=self.sim_threshold,
+            original_mlp, family=adapter.family,
+            n_slots_max=self.max_slots,
+            intermediate_size=adapter.intermediate_size,
+            hidden_size=adapter.hidden_size,
+            sim_threshold=self.sim_threshold,
         ).to(DEVICE)
-        # Match the dtype of the existing MLP weights
-        wrapped.K = wrapped.K.to(original_mlp.c_fc.weight.dtype)
-        wrapped.V = wrapped.V.to(original_mlp.c_fc.weight.dtype)
-        block.mlp = wrapped
-        # For k*/v* capture in insert(), we still hook the BASE c_proj and the
+        wrapped.K = wrapped.K.to(ref_weight.dtype)
+        wrapped.V = wrapped.V.to(ref_weight.dtype)
+        adapter.set_mlp(self.layer_idx, wrapped)
+        # For k*/v* capture in insert(), hook the BASE down_proj and the
         # wrapped MLP's full output respectively.
-        self.mlp = wrapped.base_mlp          # base for k* capture
-        self.memory_mlp = wrapped            # wrapped for v* capture + injection
-        print(f"[baseline] AddressableMemory installed at layer {self.layer_idx}; "
-              f"max slots: {self.max_slots}, sim threshold: {self.sim_threshold}, "
-              f"rewrite form: {self.rewrite_form}, n_templates: {self.n_templates}")
+        self.mlp = wrapped.base_mlp
+        self.down_proj = adapter.get_down_proj(wrapped.base_mlp)
+        self.memory_mlp = wrapped
+        print(f"[baseline] AddressableMemory installed at layer {self.layer_idx} "
+              f"({adapter.family} family); max slots: {self.max_slots}, "
+              f"sim threshold: {self.sim_threshold}, rewrite form: {self.rewrite_form}, "
+              f"n_templates: {self.n_templates}")
 
     def _insert_one(self, triple: Triple, q_idx: int) -> None:
         """Insert a single (key, delta_v) slot for `triple` using rewrite
@@ -659,7 +714,7 @@ class AddressableMemoryMethod(MEMITMethod):
         def hook_v(module, inputs, output):
             captured["v"] = output[0, last_pos].detach().clone()
 
-        h_k = self.mlp.c_proj.register_forward_hook(hook_k)
+        h_k = self.down_proj.register_forward_hook(hook_k)
         h_v = self.memory_mlp.register_forward_hook(hook_v)
         self.model.eval()
         with torch.no_grad():
@@ -789,7 +844,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--method", required=True, choices=list(METHOD_REGISTRY))
     ap.add_argument("--ckpt", default="checkpoints/pretrained_seed0_gpt2.pt")
-    ap.add_argument("--model", default="gpt2")
+    ap.add_argument("--model", default="gpt2", help="HuggingFace model name (e.g. gpt2, Qwen/Qwen2.5-0.5B-Instruct, TinyLlama/TinyLlama-1.1B-Chat-v1.0)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n_pretrain", type=int, default=2000)
     ap.add_argument("--n_insert", type=int, default=500)
@@ -846,9 +901,10 @@ def main():
 
     # ---- model + tokenizer ----
     print(f"[baseline] loading {args.model} + checkpoint")
-    tokenizer = GPT2Tokenizer.from_pretrained(args.model)
-    tokenizer.pad_token = tokenizer.eos_token
-    model = GPT2LMHeadModel.from_pretrained(args.model).to(DEVICE)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.float32).to(DEVICE)
     ckpt = torch.load(args.ckpt, map_location=DEVICE, weights_only=False)
     sd = ckpt["model_state"] if isinstance(ckpt, dict) and "model_state" in ckpt else ckpt
     model.load_state_dict(sd)

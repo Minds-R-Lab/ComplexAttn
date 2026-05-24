@@ -31,7 +31,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 try:
-    from transformers import GPT2LMHeadModel, GPT2Tokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 except ImportError:
     raise SystemExit(
         "missing dependency: pip install transformers"
@@ -102,7 +102,7 @@ class FactDataset(Dataset):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="gpt2",
-                    choices=["gpt2", "gpt2-medium", "gpt2-large"])
+                    help="HuggingFace model name (e.g. gpt2, Qwen/Qwen2.5-0.5B-Instruct, TinyLlama/TinyLlama-1.1B-Chat-v1.0)")
     ap.add_argument("--batch_size", type=int, default=16)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--max_epochs", type=int, default=-1, help="default: 20 (full) / 5 (smoke); -1 lets smoke override")
@@ -163,9 +163,10 @@ def main():
 
     # ---- Model & tokenizer ----
     print(f"[pretrain] loading {args.model}...")
-    tokenizer = GPT2Tokenizer.from_pretrained(args.model)
-    tokenizer.pad_token = tokenizer.eos_token
-    model = GPT2LMHeadModel.from_pretrained(args.model).to(DEVICE)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.float32).to(DEVICE)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[pretrain] params: {n_params:,} ({n_params/1e6:.1f}M)")
 
@@ -193,7 +194,8 @@ def main():
 
     history = []
     best_acc = 0.0
-    ckpt_path = CKPT_DIR / f"pretrained_seed{args.seed}_{args.model}.pt"
+    safe_model_name = args.model.replace("/", "__").replace("-", "_")
+    ckpt_path = CKPT_DIR / f"pretrained_seed{args.seed}_{safe_model_name}.pt"
 
     print(f"\n[pretrain] beginning training; gate target = "
           f"{args.target_retention:.2f}, max_epochs = {args.max_epochs}")
@@ -260,7 +262,7 @@ def main():
         "checkpoint": str(ckpt_path),
         "smoke": args.smoke,
     }
-    out_json = RESULTS_DIR / f"pretrain_seed{args.seed}_{args.model}.json"
+    out_json = RESULTS_DIR / f"pretrain_seed{args.seed}_{safe_model_name}.json"
     out_json.write_text(json.dumps(summary, indent=2))
     print(f"\n[pretrain] summary saved -> {out_json}")
     print(f"[pretrain] best retention: {best_acc:.4f}")
@@ -269,7 +271,7 @@ def main():
         print(f"✓ Proceed to Phase 1c-3 (baselines).")
     else:
         print(f"!! GATE FAILED: retention {best_acc:.4f} < {args.target_retention:.2f}")
-        print(f"   Per the locked plan: rerun with --model gpt2-medium.")
+        print(f"   Try a larger model (e.g. --model gpt2-medium or Qwen/Qwen2.5-1.5B).")
 
 
 if __name__ == "__main__":
