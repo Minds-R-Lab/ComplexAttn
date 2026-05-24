@@ -892,6 +892,10 @@ def main():
                     help="rewrite prompt form (addressable_mem)")
     ap.add_argument("--mem_n_templates", type=int, default=2,
                     help="number of query templates per fact to store (1 or 2; addressable_mem)")
+    ap.add_argument("--mem_v_weight_decay", type=float, default=0.5,
+                    help="L2 regularizer on delta_v / v_orig norm ratio (addressable_mem; SwiGLU often needs 0)")
+    ap.add_argument("--mem_v_norm_constraint", type=float, default=4.0,
+                    help="cap on delta_v.norm() / v_orig.norm() (addressable_mem; SwiGLU often needs >=10)")
     ap.add_argument("--out", default=None,
                     help="output JSON path; default: results/baseline_<method>_seed<s>.json")
     args = ap.parse_args()
@@ -948,12 +952,15 @@ def main():
         method = method_cls(layer_idx=args.memit_layer,
                              n_v_steps=args.memit_v_steps,
                              v_lr=args.memit_v_lr,
+                             v_weight_decay=args.mem_v_weight_decay,
+                             v_norm_constraint=args.mem_v_norm_constraint,
                              sim_threshold=args.mem_sim_threshold,
                              max_slots=args.mem_max_slots,
                              rewrite_form=args.mem_rewrite_form,
                              n_templates=args.mem_n_templates)
         print(f"[baseline] addressable_mem hyperparams: layer={args.memit_layer}  "
               f"v_steps={args.memit_v_steps}  v_lr={args.memit_v_lr}  "
+              f"v_wd={args.mem_v_weight_decay}  v_norm_cap={args.mem_v_norm_constraint}  "
               f"sim_threshold={args.mem_sim_threshold}  rewrite_form={args.mem_rewrite_form}  "
               f"n_templates={args.mem_n_templates}")
     else:
