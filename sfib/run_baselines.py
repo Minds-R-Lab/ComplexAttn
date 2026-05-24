@@ -538,19 +538,28 @@ class MLPWithMemory(nn.Module):
         h = self.base_mlp.act(h)                # (batch, seq, d_mlp)
         base_out = self.base_mlp.c_proj(h)       # (batch, seq, d_model)
 
-        # Memory path (only if slots exist)
+        # Memory path: fire only at the LAST POSITION of the input sequence.
+        # This avoids cross-slot pollution at upstream positions (which was
+        # capping insertion at ~28% in the cosine-everywhere version). The
+        # last position is where the next-token prediction is made, which is
+        # the position the v* optimization was tuned for during insertion.
         if self.n_slots > 0:
-            K_active = self.K[:self.n_slots]                # (n, d_mlp)
-            V_active = self.V[:self.n_slots]                # (n, d_model)
-            h_norm = F.normalize(h, dim=-1)
+            bsz, slen, _ = h.shape
+            last_pos = slen - 1
+            h_last = h[:, last_pos, :]                       # (bsz, d_mlp)
+            K_active = self.K[:self.n_slots]                 # (n, d_mlp)
+            V_active = self.V[:self.n_slots]                 # (n, d_model)
+            h_norm = F.normalize(h_last, dim=-1)
             K_norm = F.normalize(K_active, dim=-1)
-            sims = h_norm @ K_norm.T                         # (batch, seq, n)
-            best_sim, best_idx = sims.max(dim=-1)            # (batch, seq) each
-            gate = (best_sim > self.sim_threshold).to(base_out.dtype).unsqueeze(-1)
-            # Gather best values per position
-            bsz, slen = best_idx.shape
-            retrieved = V_active[best_idx.reshape(-1)].reshape(bsz, slen, -1)
-            base_out = base_out + retrieved * gate
+            sims = h_norm @ K_norm.T                          # (bsz, n)
+            best_sim, best_idx = sims.max(dim=-1)             # each (bsz,)
+            gate = (best_sim > self.sim_threshold).to(base_out.dtype)  # (bsz,)
+            retrieved = V_active[best_idx]                    # (bsz, d_model)
+            # Build a contribution tensor that is zero everywhere except
+            # the last position. Avoids in-place ops on the forward output.
+            contribution = torch.zeros_like(base_out)
+            contribution[:, last_pos, :] = retrieved * gate.unsqueeze(-1)
+            base_out = base_out + contribution
 
         return self.base_mlp.dropout(base_out)
 
@@ -630,17 +639,21 @@ class AddressableMemoryMethod(MEMITMethod):
         target_ids = self.tokenizer.encode(target, return_tensors="pt").to(DEVICE)
         full_ids = torch.cat([prompt_ids, target_ids], dim=1)
 
-        last_subj_pos = self._find_last_subj_pos(
-            prompt_ids[0].tolist(), triple.subject)
+        # Use the LAST PROMPT POSITION (not the subject token position).
+        # This is the position whose hidden state computes the logit for the
+        # first answer token. The MLPWithMemory wrapper fires at the last
+        # position of any input, so during eval the slot retrieval and the
+        # delta_v we optimize here land at the SAME position.
+        last_pos = prompt_ids.shape[1] - 1
 
         # --- Capture k* (from base c_proj input) and v_orig (from wrapped MLP output) ---
         captured: dict[str, torch.Tensor] = {}
 
         def hook_k(module, inputs, output):
-            captured["k"] = inputs[0][0, last_subj_pos].detach().clone()
+            captured["k"] = inputs[0][0, last_pos].detach().clone()
 
         def hook_v(module, inputs, output):
-            captured["v"] = output[0, last_subj_pos].detach().clone()
+            captured["v"] = output[0, last_pos].detach().clone()
 
         h_k = self.mlp.c_proj.register_forward_hook(hook_k)
         h_v = self.memory_mlp.register_forward_hook(hook_v)
@@ -658,7 +671,7 @@ class AddressableMemoryMethod(MEMITMethod):
 
         def inject_hook(module, inputs, output):
             out = output.clone()
-            out[0, last_subj_pos] = out[0, last_subj_pos] + delta_v
+            out[0, last_pos] = out[0, last_pos] + delta_v
             return out
 
         labels = full_ids.clone()
