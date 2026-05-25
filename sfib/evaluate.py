@@ -158,6 +158,7 @@ def generate_greedy(model, tokenizer, prompts: list[str],
             gen = model.generate(
                 input_ids=input_ids, attention_mask=attn,
                 max_new_tokens=max_new_tokens,
+                max_length=None,  # silence the max_length vs max_new_tokens warning
                 do_sample=False, num_beams=1,
                 pad_token_id=tokenizer.pad_token_id,
             )
