@@ -99,9 +99,13 @@ class GRACEWrappedMLP(nn.Module):
         # with how the language modelling head reads).
         x_last = x[:, -1, :]                                    # (batch, d_in)
         K = torch.stack(self.codebook_keys, dim=0)              # (n, d_in)
-        K = K.to(dtype=x_last.dtype, device=x_last.device)
-        # Euclidean distance (n entries, batch positions)
-        dists = torch.cdist(x_last, K)                           # (batch, n)
+        K = K.to(device=x_last.device)
+        # torch.cdist lacks a CUDA bfloat16 kernel, so cast to fp32 for the
+        # distance computation. Memory cost is small (n_slots * d_in floats)
+        # and the cast is local -- the output is converted back at the end.
+        x_last_f = x_last.float()
+        K_f = K.float()
+        dists = torch.cdist(x_last_f, K_f)                       # (batch, n)
         min_dists, min_idx = dists.min(dim=-1)                   # (batch,) each
         eps_per = torch.tensor(
             [self.codebook_eps[i] for i in min_idx.tolist()],
@@ -317,8 +321,4 @@ class GRACEMethod(Method):
         self.wrapped_mlp.add_entry(k_star, value.detach(), new_eps, label)
 
 
-# ---------------------------------------------------------------------------
-# Self-register into the existing METHOD_REGISTRY (idempotent)
-# ---------------------------------------------------------------------------
-
-METHOD_REGISTRY["grace"] = GRACEMethod
+# ------------------------------------------------
