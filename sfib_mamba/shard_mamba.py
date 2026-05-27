@@ -106,6 +106,13 @@ class SHARDMambaWrapper(nn.Module):
         if self.n_slots == 0:
             return base_out
 
+        # Debug accounting: count forward passes and slot hits.
+        if not hasattr(self, "_diag_forwards"):
+            self._diag_forwards = 0
+            self._diag_hits = 0
+            self._diag_max_sim_recent = []
+        self._diag_forwards += 1
+
         # Identify the position(s) at which to apply the slot.
         if self._override_fire_pos is not None:
             positions = [self._override_fire_pos]
@@ -122,14 +129,17 @@ class SHARDMambaWrapper(nn.Module):
         out = base_out.clone()
         for pos in positions:
             x_pos = x[:, pos, :]                          # (batch, d_key)
-            # cosine sim (fp32 for numerical stability + bf16-CUDA cdist friendliness)
             x_n = F.normalize(x_pos.float(), dim=-1)
             K_n = F.normalize(K.float(), dim=-1)
             sims = x_n @ K_n.t()                          # (batch, n_slots)
             best_sim, best_idx = sims.max(dim=-1)         # (batch,) each
+            # Diagnostic: record the highest sim of any batch position.
+            if len(self._diag_max_sim_recent) < 200:
+                self._diag_max_sim_recent.append(float(best_sim.max().item()))
             hit = (best_sim > self.sim_threshold)
             if not bool(hit.any()):
                 continue
+            self._diag_hits += int(hit.sum().item())
             V_chosen = V[best_idx]                        # (batch, d_value)
             new_pos = out[:, pos, :] + torch.where(
                 hit.unsqueeze(-1), V_chosen, torch.zeros_like(V_chosen)
@@ -157,7 +167,7 @@ class SHARDMambaMethod(Method):
                  v_norm_constraint: float = 20.0,
                  sim_threshold: float = 0.7,
                  max_slots: int = 8000,
-                 capture_position: str = "subject_last",
+                 capture_position: str = "prompt_last",
                  fire_position: str = "last"):
         if kind not in ("out_proj", "in_proj", "x_proj"):
             raise ValueError(f"kind must be one of out_proj|in_proj|x_proj, got {kind!r}")

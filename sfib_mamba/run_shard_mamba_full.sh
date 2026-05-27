@@ -35,7 +35,7 @@ run_cell () {
     --layer "$LAYER" --kind out_proj \
     --v_steps "$V_STEPS" --v_lr "$V_LR" --v_weight_decay "$V_WD" \
     --v_norm_constraint "$V_NORMCAP" --sim_threshold "$TAU" \
-    --capture_position subject_last --fire_position last \
+    --capture_position prompt_last --fire_position last \
     --out "$OUT"
 }
 

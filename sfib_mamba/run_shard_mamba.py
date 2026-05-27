@@ -79,8 +79,8 @@ def main():
     ap.add_argument("--sim_threshold", type=float, default=0.7)
     ap.add_argument("--max_slots", type=int, default=8000)
     ap.add_argument("--capture_position", choices=["subject_last", "prompt_last"],
-                    default="subject_last",
-                    help="Where to capture the slot key (ROMBA: subject_last)")
+                    default="prompt_last",
+                    help="Where to capture the slot key (must match fire_position for the slot to actually fire)")
     ap.add_argument("--fire_position", choices=["last", "all"], default="last")
 
     ap.add_argument("--out", required=True)
@@ -141,6 +141,21 @@ def main():
             "N": N, "efficacy": eff, "generalization": gen, "specificity": spec,
             "n_slots": method.wrapper.n_slots, "tag": tag,
         })
+        # Diagnostic: dump the routing stats so we can see if slots ever fire.
+        w = method.wrapper
+        if hasattr(w, "_diag_forwards") and w._diag_forwards > 0:
+            sims = w._diag_max_sim_recent
+            if sims:
+                import statistics
+                avg = sum(sims) / len(sims)
+                mx = max(sims)
+                mn = min(sims)
+                print(f"    [diag] forwards={w._diag_forwards}  hits={w._diag_hits}  "
+                      f"max_sim avg/min/max = {avg:.3f}/{mn:.3f}/{mx:.3f}  (tau={w.sim_threshold})")
+            # Reset for the next anchor window
+            w._diag_forwards = 0
+            w._diag_hits = 0
+            w._diag_max_sim_recent = []
 
     if 0 in eval_at:
         eval_and_log(0, tag="pre-edit")
