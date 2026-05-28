@@ -83,13 +83,16 @@ def main():
                     help="Where to capture the slot key (must match fire_position for the slot to actually fire)")
     ap.add_argument("--fire_position", choices=["last", "all"], default="last")
 
-    ap.add_argument("--value_optim", choices=["vstar", "lqr"], default="vstar",
-                    help="delta_v optimizer: vstar (ROME-style multi-step Adam) or "
-                         "lqr (control-theoretic closed-form Tikhonov / Gauss-Newton)")
+    ap.add_argument("--value_optim", choices=["vstar", "lqr", "lqr_gn"], default="vstar",
+                    help="delta_v optimizer: vstar (ROME-style 200-step Adam), "
+                         "lqr (one-shot saturated control), or "
+                         "lqr_gn (multi-step Gauss-Newton LQR)")
     ap.add_argument("--lqr_lambda", type=float, default=1e-3,
                     help="LQR Tikhonov weight (scaled by 1/||v_orig||^2); only used when value_optim=lqr")
     ap.add_argument("--lqr_alpha_scale", type=float, default=1.0,
-                    help="Scale on the LQR feedback gain (1.0 = exact linearized-CE-to-zero step)")
+                    help="Scale on the LQR feedback gain (1.0 = saturate at the box boundary)")
+    ap.add_argument("--n_lqr_iters", type=int, default=5,
+                    help="Number of Gauss-Newton LQR iterations; only used when value_optim=lqr_gn (default 5)")
 
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -125,6 +128,7 @@ def main():
         value_optim=args.value_optim,
         lqr_lambda=args.lqr_lambda,
         lqr_alpha_scale=args.lqr_alpha_scale,
+        n_lqr_iters=args.n_lqr_iters,
     )
     method.setup(model, tokenizer, kb=None)
 
@@ -198,17 +202,10 @@ def main():
         "value_optim": args.value_optim,
         "lqr_lambda": args.lqr_lambda,
         "lqr_alpha_scale": args.lqr_alpha_scale,
+        "n_lqr_iters": args.n_lqr_iters,
         "n_slots_final": method.wrapper.n_slots,
         "wall_time_stream_s": t_stream,
         "results": results,
     }
     out_path = Path(args.out)
-    out_path.parent.mkdir(exist_ok=True, parents=True)
-    with open(out_path, "w") as f:
-        json.dump(out, f, indent=2)
-    print(f"[shard-mamba] results -> {out_path}")
-    print(f"[shard-mamba] final codebook: {method.wrapper.n_slots} slots from {args.n_edits} edits")
-
-
-if __name__ == "__main__":
-    main()
+    out_path.parent.mkd
