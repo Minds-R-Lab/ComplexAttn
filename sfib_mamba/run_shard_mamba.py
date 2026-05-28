@@ -208,4 +208,12 @@ def main():
         "results": results,
     }
     out_path = Path(args.out)
-    out_path.parent.mkd
+    out_path.parent.mkdir(exist_ok=True, parents=True)
+    with open(out_path, "w") as f:
+        json.dump(out, f, indent=2)
+    print(f"[shard-mamba] results -> {out_path}")
+    print(f"[shard-mamba] final codebook: {method.wrapper.n_slots} slots from {args.n_edits} edits")
+
+
+if __name__ == "__main__":
+    main()
