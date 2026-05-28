@@ -302,4 +302,101 @@ class SHARDMambaMethod(Method):
         def inject_hook(module, inputs, output):
             out = output.clone()
             out[0, capture_pos] = out[0, capture_pos] + delta_v
-  
+            return out
+
+        h_inject = self.wrapper.base_module.register_forward_hook(inject_hook)
+        try:
+            for step in range(self.n_v_steps):
+                opt.zero_grad()
+                out = self.model(input_ids=full_ids, labels=labels)
+                ce = out.loss
+                reg = self.v_weight_decay * (delta_v.norm() ** 2) / (
+                    v_orig.norm() ** 2 + 1e-8)
+                loss = ce + reg
+                loss.backward()
+                opt.step()
+                # Norm cap (relative to v_orig)
+                with torch.no_grad():
+                    max_norm = self.v_norm_constraint * v_orig.norm().item()
+                    cur_norm = delta_v.norm().item()
+                    if cur_norm > max_norm and cur_norm > 0:
+                        delta_v.mul_(max_norm / cur_norm)
+        finally:
+            h_inject.remove()
+        return delta_v.detach()
+
+    # ------------------------------------------------------------------
+    def _optimize_lqr(self, full_ids, labels, capture_pos, v_orig):
+        """Control-theoretic LQR / Tikhonov closed-form for delta_v.
+
+        Treat one-step slot insertion as a finite-horizon LQR problem on the
+        residual stream: the "state" we wish to steer is the cross-entropy on
+        the target tokens, the "control" is the additive perturbation delta_v
+        applied at the chosen position, and the cost is
+
+            J(delta_v) = CE(delta_v) + (lambda / ||v_orig||^2) * ||delta_v||^2.
+
+        Linearizing CE around delta_v = 0,
+
+            CE(delta_v) ~ CE_0 + g^T delta_v,    g := d CE / d (delta_v) | 0.
+
+        The first-order optimality condition gives the closed-form Tikhonov /
+        Gauss-Newton step
+
+            delta_v* = - alpha * g / (||g||^2 + lambda_eff),
+
+        where lambda_eff = lambda * ||v_orig||^{-2} and alpha is chosen so the
+        linearized CE is driven to zero,
+
+            alpha = CE_0 * (||g||^2 + lambda_eff) / ||g||^2.
+
+        We then clamp ||delta_v*|| to the same v_norm_constraint as the v*
+        path so the two methods share an admissible-control set.
+
+        One backward pass instead of n_v_steps. The control-theoretic
+        interpretation: this is the LQR feedback law for one slot, with
+        Q = identity on the CE residual, R = (lambda_eff) * I on delta_v,
+        evaluated at the operating point delta_v = 0.
+        """
+        delta_v = torch.zeros_like(v_orig, requires_grad=True)
+
+        def inject_hook(module, inputs, output):
+            out = output.clone()
+            out[0, capture_pos] = out[0, capture_pos] + delta_v
+            return out
+
+        h_inject = self.wrapper.base_module.register_forward_hook(inject_hook)
+        try:
+            # One forward + backward at delta_v = 0
+            out = self.model(input_ids=full_ids, labels=labels)
+            ce0 = out.loss
+            ce0.backward()
+            g = delta_v.grad.detach().clone()
+        finally:
+            h_inject.remove()
+
+        ce0_val = float(ce0.detach().item())
+        g_sq = float((g * g).sum().item())
+        # Effective Tikhonov weight, scaled the same way as the v* regularizer
+        v_orig_sq = float(v_orig.norm().item() ** 2) + 1e-8
+        lambda_eff = self.lqr_lambda / v_orig_sq
+
+        if g_sq < 1e-12:
+            # Gradient vanishes -- no informative direction; leave delta_v at 0.
+            return torch.zeros_like(v_orig).detach()
+
+        # LQR feedback: alpha drives the linearized CE to zero
+        alpha = self.lqr_alpha_scale * ce0_val * (g_sq + lambda_eff) / g_sq
+        delta_v_star = -alpha * g / (g_sq + lambda_eff)
+
+        # Norm clamp (same admissible-control set as v*)
+        max_norm = self.v_norm_constraint * v_orig.norm().item()
+        cur_norm = float(delta_v_star.norm().item())
+        if cur_norm > max_norm and cur_norm > 0:
+            delta_v_star = delta_v_star * (max_norm / cur_norm)
+        return delta_v_star.detach()
+
+
+# Self-register if the SFIB registry is available.
+if _HAVE_REGISTRY:
+    METHOD_REGISTRY["shard_mamba"] = SHARDMambaMethod
