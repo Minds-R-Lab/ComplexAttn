@@ -168,11 +168,16 @@ class SHARDMambaMethod(Method):
                  sim_threshold: float = 0.7,
                  max_slots: int = 8000,
                  capture_position: str = "prompt_last",
-                 fire_position: str = "last"):
+                 fire_position: str = "last",
+                 value_optim: str = "vstar",
+                 lqr_lambda: float = 1e-3,
+                 lqr_alpha_scale: float = 1.0):
         if kind not in ("out_proj", "in_proj", "x_proj"):
             raise ValueError(f"kind must be one of out_proj|in_proj|x_proj, got {kind!r}")
         if capture_position not in ("subject_last", "prompt_last"):
             raise ValueError(f"capture_position must be subject_last|prompt_last, got {capture_position!r}")
+        if value_optim not in ("vstar", "lqr"):
+            raise ValueError(f"value_optim must be 'vstar' or 'lqr', got {value_optim!r}")
         self.layer_idx = int(layer_idx)
         self.kind = kind
         self.n_v_steps = int(n_v_steps)
@@ -183,6 +188,9 @@ class SHARDMambaMethod(Method):
         self.max_slots = int(max_slots)
         self.capture_position = capture_position
         self.fire_position = fire_position
+        self.value_optim = value_optim
+        self.lqr_lambda = float(lqr_lambda)
+        self.lqr_alpha_scale = float(lqr_alpha_scale)
 
     # ------------------------------------------------------------------
     def setup(self, model, tokenizer, kb=None):
@@ -203,7 +211,9 @@ class SHARDMambaMethod(Method):
         self.adapter.install_wrapper(self.layer_idx, self.kind, self.wrapper)
         print(f"[shard-mamba] installed at layer {self.layer_idx} ({self.adapter.family}); "
               f"site={self.kind}, d_key={site.d_key}, d_value={site.d_value}; "
-              f"tau={self.sim_threshold}, n_v_steps={self.n_v_steps}, v_lr={self.v_lr}, "
+              f"tau={self.sim_threshold}, value_optim={self.value_optim}, "
+              f"n_v_steps={self.n_v_steps}, v_lr={self.v_lr}, "
+              f"lqr_lambda={self.lqr_lambda}, lqr_alpha_scale={self.lqr_alpha_scale}, "
               f"capture@{self.capture_position}, fire@{self.fire_position}")
 
     # ------------------------------------------------------------------
@@ -268,10 +278,22 @@ class SHARDMambaMethod(Method):
         v_orig = captured["v_orig"]
 
         # ---- 2. Optimize delta_v ----
-        delta_v = torch.zeros_like(v_orig, requires_grad=True)
-        opt = torch.optim.Adam([delta_v], lr=self.v_lr)
         labels = full_ids.clone()
         labels[:, :prompt_ids.shape[1]] = -100  # CE only on target tokens
+
+        if self.value_optim == "vstar":
+            delta_v = self._optimize_vstar(full_ids, labels, capture_pos, v_orig)
+        else:  # "lqr"
+            delta_v = self._optimize_lqr(full_ids, labels, capture_pos, v_orig)
+
+        # ---- 3. Append the (k*, delta_v) slot ----
+        self.wrapper.add_slot(k_star, delta_v.detach())
+
+    # ------------------------------------------------------------------
+    def _optimize_vstar(self, full_ids, labels, capture_pos, v_orig):
+        """ROME-style multi-step optimization of delta_v (200-step Adam by default)."""
+        delta_v = torch.zeros_like(v_orig, requires_grad=True)
+        opt = torch.optim.Adam([delta_v], lr=self.v_lr)
 
         # During optimization, inject delta_v at capture_pos by adding it to
         # the BASE module's output at that position. We do this with a hook
@@ -280,32 +302,4 @@ class SHARDMambaMethod(Method):
         def inject_hook(module, inputs, output):
             out = output.clone()
             out[0, capture_pos] = out[0, capture_pos] + delta_v
-            return out
-
-        h_inject = self.wrapper.base_module.register_forward_hook(inject_hook)
-        try:
-            for step in range(self.n_v_steps):
-                opt.zero_grad()
-                out = self.model(input_ids=full_ids, labels=labels)
-                ce = out.loss
-                reg = self.v_weight_decay * (delta_v.norm() ** 2) / (
-                    v_orig.norm() ** 2 + 1e-8)
-                loss = ce + reg
-                loss.backward()
-                opt.step()
-                # Norm cap (relative to v_orig)
-                with torch.no_grad():
-                    max_norm = self.v_norm_constraint * v_orig.norm().item()
-                    cur_norm = delta_v.norm().item()
-                    if cur_norm > max_norm and cur_norm > 0:
-                        delta_v.mul_(max_norm / cur_norm)
-        finally:
-            h_inject.remove()
-
-        # ---- 3. Append the (k*, delta_v) slot ----
-        self.wrapper.add_slot(k_star, delta_v.detach())
-
-
-# Self-register if the SFIB registry is available.
-if _HAVE_REGISTRY:
-    METHOD_REGISTRY["shard_mamba"] = SHARDMambaMethod
+  
