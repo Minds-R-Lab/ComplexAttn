@@ -171,13 +171,14 @@ class SHARDMambaMethod(Method):
                  fire_position: str = "last",
                  value_optim: str = "vstar",
                  lqr_lambda: float = 1e-3,
-                 lqr_alpha_scale: float = 1.0):
+                 lqr_alpha_scale: float = 1.0,
+                 n_lqr_iters: int = 5):
         if kind not in ("out_proj", "in_proj", "x_proj"):
             raise ValueError(f"kind must be one of out_proj|in_proj|x_proj, got {kind!r}")
         if capture_position not in ("subject_last", "prompt_last"):
             raise ValueError(f"capture_position must be subject_last|prompt_last, got {capture_position!r}")
-        if value_optim not in ("vstar", "lqr"):
-            raise ValueError(f"value_optim must be 'vstar' or 'lqr', got {value_optim!r}")
+        if value_optim not in ("vstar", "lqr", "lqr_gn"):
+            raise ValueError(f"value_optim must be 'vstar', 'lqr', or 'lqr_gn', got {value_optim!r}")
         self.layer_idx = int(layer_idx)
         self.kind = kind
         self.n_v_steps = int(n_v_steps)
@@ -191,6 +192,7 @@ class SHARDMambaMethod(Method):
         self.value_optim = value_optim
         self.lqr_lambda = float(lqr_lambda)
         self.lqr_alpha_scale = float(lqr_alpha_scale)
+        self.n_lqr_iters = int(n_lqr_iters)
 
     # ------------------------------------------------------------------
     def setup(self, model, tokenizer, kb=None):
@@ -283,8 +285,10 @@ class SHARDMambaMethod(Method):
 
         if self.value_optim == "vstar":
             delta_v = self._optimize_vstar(full_ids, labels, capture_pos, v_orig)
-        else:  # "lqr"
+        elif self.value_optim == "lqr":
             delta_v = self._optimize_lqr(full_ids, labels, capture_pos, v_orig)
+        else:  # "lqr_gn"
+            delta_v = self._optimize_lqr_gn(full_ids, labels, capture_pos, v_orig)
 
         # ---- 3. Append the (k*, delta_v) slot ----
         self.wrapper.add_slot(k_star, delta_v.detach())
@@ -403,6 +407,58 @@ class SHARDMambaMethod(Method):
         if cur_norm > max_norm and cur_norm > 0:
             delta_v_star = delta_v_star * (max_norm / cur_norm)
         return delta_v_star.detach()
+
+    # ------------------------------------------------------------------
+    def _optimize_lqr_gn(self, full_ids, labels, capture_pos, v_orig):
+        """Multi-step Gauss-Newton LQR for delta_v.
+
+        Iterates the saturated LQR feedback law n_lqr_iters times, with each
+        iteration recomputing the gradient at the current delta_v and taking
+        a step of size (gamma * ||v_orig|| / n_lqr_iters) in the current
+        normalized-gradient direction. Total step-size budget equals one
+        saturation; the trajectory follows the loss landscape's curvature.
+
+        n_lqr_iters = 1 reduces to the one-shot LQR. n_lqr_iters = 5 (default)
+        gives ~5 backward passes per insertion -- roughly 40x cheaper than
+        the 200-step v* path. Higher n_lqr_iters approaches v* quality.
+
+        Control-theoretic reading: this is a finite-horizon LQR feedback law
+        with horizon = n_lqr_iters time steps and total control budget
+        gamma * ||v_orig||, with the gradient direction re-linearized at each
+        time step (i.e. trust-region Gauss-Newton).
+        """
+        delta_v = torch.zeros_like(v_orig, requires_grad=True)
+        max_norm = self.v_norm_constraint * v_orig.norm().item()
+        per_step = self.lqr_alpha_scale * max_norm / max(self.n_lqr_iters, 1)
+
+        def inject_hook(module, inputs, output):
+            out = output.clone()
+            out[0, capture_pos] = out[0, capture_pos] + delta_v
+            return out
+
+        h_inject = self.wrapper.base_module.register_forward_hook(inject_hook)
+        try:
+            for it in range(self.n_lqr_iters):
+                # Compute gradient at current delta_v
+                if delta_v.grad is not None:
+                    delta_v.grad.zero_()
+                out = self.model(input_ids=full_ids, labels=labels)
+                ce = out.loss
+                ce.backward()
+                g = delta_v.grad.detach().clone()
+                g_norm = float((g * g).sum().item()) ** 0.5
+                if g_norm < 1e-12:
+                    break
+                # Saturated step in current normalized-gradient direction
+                with torch.no_grad():
+                    delta_v.add_(-(per_step / g_norm) * g)
+                    # Clamp to admissible-control box at every iteration
+                    cur_norm = delta_v.norm().item()
+                    if cur_norm > max_norm and cur_norm > 0:
+                        delta_v.mul_(max_norm / cur_norm)
+        finally:
+            h_inject.remove()
+        return delta_v.detach()
 
 
 # Self-register if the SFIB registry is available.
