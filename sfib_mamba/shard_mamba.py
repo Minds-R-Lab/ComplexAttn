@@ -327,36 +327,45 @@ class SHARDMambaMethod(Method):
 
     # ------------------------------------------------------------------
     def _optimize_lqr(self, full_ids, labels, capture_pos, v_orig):
-        """Control-theoretic LQR / Tikhonov closed-form for delta_v.
+        """Control-theoretic LQR closed-form for delta_v (saturated-control regime).
 
-        Treat one-step slot insertion as a finite-horizon LQR problem on the
-        residual stream: the "state" we wish to steer is the cross-entropy on
-        the target tokens, the "control" is the additive perturbation delta_v
-        applied at the chosen position, and the cost is
+        Slot insertion is a one-step LQR problem on the residual stream: the
+        "state" we wish to steer is the cross-entropy on the target tokens,
+        the "control" is the additive perturbation delta_v at the chosen
+        position, subject to ||delta_v|| <= gamma * ||v_orig|| (the same
+        admissible-control set as the v* path).
 
-            J(delta_v) = CE(delta_v) + (lambda / ||v_orig||^2) * ||delta_v||^2.
+        We linearize CE around delta_v = 0:
 
-        Linearizing CE around delta_v = 0,
+            CE(delta_v) ~ CE_0 + g^T delta_v,   g := d CE / d (delta_v) | 0,
 
-            CE(delta_v) ~ CE_0 + g^T delta_v,    g := d CE / d (delta_v) | 0.
+        which gives the unconstrained Tikhonov optimum
+        delta_v_uncon = -L_0 * g / ||g||^2. For the cross-entropy near
+        delta_v = 0, the linearization severely underestimates the curvature
+        (logsumexp curves up sharply), so delta_v_uncon is much too small
+        to actually flip the model's prediction -- which we observed
+        empirically: |delta_v_uncon| / |v_orig| was an order of magnitude
+        below the v* path's converged step, leading to slot fires that do
+        not move the next-token distribution.
 
-        The first-order optimality condition gives the closed-form Tikhonov /
-        Gauss-Newton step
+        The textbook LQR response when the unconstrained optimum exceeds
+        (or, equivalently, the linearization underestimates) is to saturate
+        the control to the boundary of the admissible set in the steepest-
+        descent direction. We adopt the saturated control:
 
-            delta_v* = - alpha * g / (||g||^2 + lambda_eff),
+            delta_v* = - alpha_scale * gamma * ||v_orig|| * g / ||g||.
 
-        where lambda_eff = lambda * ||v_orig||^{-2} and alpha is chosen so the
-        linearized CE is driven to zero,
+        This matches the magnitude at which the 200-step v* Adam loop
+        saturates (v* hits the same norm cap after roughly 100 iterations
+        with lr = 1.0, no weight decay) while still requiring only one
+        backward pass. The direction is exactly the unconstrained Tikhonov
+        direction; only the magnitude is set by the control-set boundary.
 
-            alpha = CE_0 * (||g||^2 + lambda_eff) / ||g||^2.
-
-        We then clamp ||delta_v*|| to the same v_norm_constraint as the v*
-        path so the two methods share an admissible-control set.
-
-        One backward pass instead of n_v_steps. The control-theoretic
-        interpretation: this is the LQR feedback law for one slot, with
-        Q = identity on the CE residual, R = (lambda_eff) * I on delta_v,
-        evaluated at the operating point delta_v = 0.
+        Control-theoretic reading: this is the LQR feedback law in the
+        saturation regime -- the controller responds to the linearized
+        residual at maximum gain along its optimal direction. The
+        lqr_alpha_scale parameter (default 1.0) lets the user dial the
+        actuation back if the boundary step overshoots.
         """
         delta_v = torch.zeros_like(v_orig, requires_grad=True)
 
@@ -375,22 +384,21 @@ class SHARDMambaMethod(Method):
         finally:
             h_inject.remove()
 
-        ce0_val = float(ce0.detach().item())
-        g_sq = float((g * g).sum().item())
-        # Effective Tikhonov weight, scaled the same way as the v* regularizer
-        v_orig_sq = float(v_orig.norm().item() ** 2) + 1e-8
-        lambda_eff = self.lqr_lambda / v_orig_sq
-
-        if g_sq < 1e-12:
+        g_norm = float((g * g).sum().item()) ** 0.5
+        if g_norm < 1e-12:
             # Gradient vanishes -- no informative direction; leave delta_v at 0.
             return torch.zeros_like(v_orig).detach()
 
-        # LQR feedback: alpha drives the linearized CE to zero
-        alpha = self.lqr_alpha_scale * ce0_val * (g_sq + lambda_eff) / g_sq
-        delta_v_star = -alpha * g / (g_sq + lambda_eff)
-
-        # Norm clamp (same admissible-control set as v*)
+        # Saturated LQR control: bang-bang along the steepest-descent
+        # direction, capped at gamma * ||v_orig|| (same admissible-control set
+        # as v*). The unconstrained Tikhonov optimum -L_0 * g / ||g||^2 is far
+        # too small in practice because the CE linearization at delta_v = 0
+        # underestimates the curvature; saturating the control to the box
+        # boundary is the textbook LQR response in this regime.
         max_norm = self.v_norm_constraint * v_orig.norm().item()
+        delta_v_star = (-self.lqr_alpha_scale * max_norm / g_norm) * g
+
+        # Belt-and-braces clamp (no-op when lqr_alpha_scale <= 1).
         cur_norm = float(delta_v_star.norm().item())
         if cur_norm > max_norm and cur_norm > 0:
             delta_v_star = delta_v_star * (max_norm / cur_norm)
