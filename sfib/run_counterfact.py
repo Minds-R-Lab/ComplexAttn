@@ -195,6 +195,15 @@ def main():
     ap.add_argument("--mem_n_templates", type=int, default=1)
     ap.add_argument("--mem_v_weight_decay", type=float, default=0.5)
     ap.add_argument("--mem_v_norm_constraint", type=float, default=4.0)
+    ap.add_argument("--mem_value_optim", choices=["vstar", "lqr", "lqr_gn"], default="vstar",
+                    help="delta_v optimizer for addressable_mem: vstar (200-step Adam), "
+                         "lqr (one-shot saturated bang-bang), or lqr_gn (multi-step "
+                         "Gauss-Newton LQR with --mem_n_lqr_iters re-linearization steps)")
+    ap.add_argument("--mem_n_lqr_iters", type=int, default=10,
+                    help="Number of Gauss-Newton LQR iterations; only used when "
+                         "mem_value_optim=lqr_gn (default 10)")
+    ap.add_argument("--mem_lqr_alpha_scale", type=float, default=1.0,
+                    help="Scale on the LQR feedback gain (1.0 = saturate at the box boundary)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -250,11 +259,15 @@ def main():
                       sim_threshold=args.mem_sim_threshold,
                       max_slots=args.mem_max_slots,
                       rewrite_form=args.mem_rewrite_form,
-                      n_templates=args.mem_n_templates)
+                      n_templates=args.mem_n_templates,
+                      value_optim=args.mem_value_optim,
+                      n_lqr_iters=args.mem_n_lqr_iters,
+                      lqr_alpha_scale=args.mem_lqr_alpha_scale)
         print(f"[cf] addressable_mem: layer={args.memit_layer}  "
               f"v_steps={args.memit_v_steps}  v_lr={args.memit_v_lr}  "
               f"v_wd={args.mem_v_weight_decay}  v_norm_cap={args.mem_v_norm_constraint}  "
-              f"sim_threshold={args.mem_sim_threshold}  n_templates={args.mem_n_templates}")
+              f"sim_threshold={args.mem_sim_threshold}  n_templates={args.mem_n_templates}  "
+              f"value_optim={args.mem_value_optim}  n_lqr_iters={args.mem_n_lqr_iters}")
     else:
         method = cls()
 

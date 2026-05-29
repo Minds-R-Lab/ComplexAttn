@@ -639,7 +639,10 @@ class AddressableMemoryMethod(MEMITMethod):
                  v_lr: float = 0.5, v_weight_decay: float = 0.5,
                  v_norm_constraint: float = 4.0,
                  sim_threshold: float = 0.7, max_slots: int = 8000,
-                 rewrite_form: str = "qa", n_templates: int = 2):
+                 rewrite_form: str = "qa", n_templates: int = 2,
+                 value_optim: str = "vstar",
+                 n_lqr_iters: int = 10,
+                 lqr_alpha_scale: float = 1.0):
         super().__init__(layer_idx=layer_idx, n_v_steps=n_v_steps,
                           v_lr=v_lr, v_weight_decay=v_weight_decay,
                           v_norm_constraint=v_norm_constraint)
@@ -651,6 +654,11 @@ class AddressableMemoryMethod(MEMITMethod):
         if n_templates < 1:
             raise ValueError(f"n_templates must be >= 1, got {n_templates}")
         self.n_templates = n_templates
+        if value_optim not in ("vstar", "lqr", "lqr_gn"):
+            raise ValueError(f"value_optim must be 'vstar', 'lqr', or 'lqr_gn', got {value_optim!r}")
+        self.value_optim = value_optim
+        self.n_lqr_iters = int(n_lqr_iters)
+        self.lqr_alpha_scale = float(lqr_alpha_scale)
 
     def _build_rewrite(self, triple: Triple, q_idx: int = 0) -> tuple[str, str]:
         """For Q/A form, use the model's eval query format directly so the
@@ -735,6 +743,24 @@ class AddressableMemoryMethod(MEMITMethod):
         h_v.remove()
 
         # --- Optimize a delta_v per position, jointly minimizing CE ---
+        labels = full_ids.clone()
+        labels[:, :prompt_ids.shape[1]] = -100
+
+        if self.value_optim == "vstar":
+            delta_vs = self._optimize_vstar_multi(full_ids, labels, positions, captured_v)
+        elif self.value_optim == "lqr":
+            delta_vs = self._optimize_lqr_multi(full_ids, labels, positions, captured_v)
+        else:  # "lqr_gn"
+            delta_vs = self._optimize_lqr_gn_multi(full_ids, labels, positions, captured_v)
+
+        # --- Store one slot per predicting position ---
+        for pos in positions:
+            self.memory_mlp.add_slot(captured_k[pos], delta_vs[pos])
+
+    # ------------------------------------------------------------------
+    def _optimize_vstar_multi(self, full_ids, labels, positions, captured_v):
+        """ROME-style multi-step Adam optimization of one delta_v per
+        predicting position (the original SHARD-transformer v* path)."""
         delta_vs = {pos: torch.zeros_like(captured_v[pos], requires_grad=True)
                      for pos in positions}
         opt = torch.optim.Adam(list(delta_vs.values()), lr=self.v_lr)
@@ -744,9 +770,6 @@ class AddressableMemoryMethod(MEMITMethod):
             for pos, dv in delta_vs.items():
                 out[0, pos] = out[0, pos] + dv
             return out
-
-        labels = full_ids.clone()
-        labels[:, :prompt_ids.shape[1]] = -100
 
         h_inject = self.memory_mlp.register_forward_hook(inject_hook)
         try:
@@ -768,10 +791,96 @@ class AddressableMemoryMethod(MEMITMethod):
                             dv.mul_(max_norm / cur_norm)
         finally:
             h_inject.remove()
+        return {pos: dv.detach() for pos, dv in delta_vs.items()}
 
-        # --- Store one slot per predicting position ---
-        for pos in positions:
-            self.memory_mlp.add_slot(captured_k[pos], delta_vs[pos].detach())
+    # ------------------------------------------------------------------
+    def _optimize_lqr_multi(self, full_ids, labels, positions, captured_v):
+        """One-shot saturated LQR feedback, multi-position.
+
+        For each predicting position p, compute g_p = d CE / d (delta_v_p)
+        at delta_v = 0 (one shared backward pass across all positions),
+        then take the saturated control:
+
+            delta_v*_p = - alpha_scale * gamma * ||v_orig_p|| * g_p / ||g_p||.
+
+        Mirrors the Mamba SHARD lqr mode; the math is architecture-agnostic.
+        """
+        delta_vs = {pos: torch.zeros_like(captured_v[pos], requires_grad=True)
+                     for pos in positions}
+
+        def inject_hook(module, inputs, output):
+            out = output.clone()
+            for pos, dv in delta_vs.items():
+                out[0, pos] = out[0, pos] + dv
+            return out
+
+        h_inject = self.memory_mlp.register_forward_hook(inject_hook)
+        try:
+            out = self.model(input_ids=full_ids, labels=labels)
+            ce = out.loss
+            ce.backward()
+            grads = {pos: dv.grad.detach().clone() for pos, dv in delta_vs.items()}
+        finally:
+            h_inject.remove()
+
+        result: dict[int, torch.Tensor] = {}
+        for pos, g in grads.items():
+            g_norm = float((g * g).sum().item()) ** 0.5
+            if g_norm < 1e-12:
+                result[pos] = torch.zeros_like(captured_v[pos])
+                continue
+            max_norm = self.v_norm_constraint * captured_v[pos].norm().item()
+            dv_star = (-self.lqr_alpha_scale * max_norm / g_norm) * g
+            cur_norm = float(dv_star.norm().item())
+            if cur_norm > max_norm and cur_norm > 0:
+                dv_star = dv_star * (max_norm / cur_norm)
+            result[pos] = dv_star.detach()
+        return result
+
+    # ------------------------------------------------------------------
+    def _optimize_lqr_gn_multi(self, full_ids, labels, positions, captured_v):
+        """Multi-step Gauss-Newton LQR, multi-position. T = n_lqr_iters
+        iterations, each re-linearizing the gradient at the current
+        delta_vs and stepping (alpha_scale * gamma * ||v_orig_p|| / T) in
+        the per-position normalized-gradient direction with box projection.
+        """
+        delta_vs = {pos: torch.zeros_like(captured_v[pos], requires_grad=True)
+                     for pos in positions}
+        max_norms = {pos: self.v_norm_constraint * captured_v[pos].norm().item()
+                      for pos in positions}
+        per_steps = {pos: self.lqr_alpha_scale * max_norms[pos] / max(self.n_lqr_iters, 1)
+                      for pos in positions}
+
+        def inject_hook(module, inputs, output):
+            out = output.clone()
+            for pos, dv in delta_vs.items():
+                out[0, pos] = out[0, pos] + dv
+            return out
+
+        h_inject = self.memory_mlp.register_forward_hook(inject_hook)
+        try:
+            for it in range(self.n_lqr_iters):
+                for dv in delta_vs.values():
+                    if dv.grad is not None:
+                        dv.grad.zero_()
+                out = self.model(input_ids=full_ids, labels=labels)
+                ce = out.loss
+                ce.backward()
+                with torch.no_grad():
+                    for pos, dv in delta_vs.items():
+                        g = dv.grad
+                        if g is None:
+                            continue
+                        g_norm = float((g * g).sum().item()) ** 0.5
+                        if g_norm < 1e-12:
+                            continue
+                        dv.add_(-(per_steps[pos] / g_norm) * g)
+                        cur_norm = dv.norm().item()
+                        if cur_norm > max_norms[pos] and cur_norm > 0:
+                            dv.mul_(max_norms[pos] / cur_norm)
+        finally:
+            h_inject.remove()
+        return {pos: dv.detach() for pos, dv in delta_vs.items()}
 
     def insert(self, triple: Triple) -> None:
         """Multi-prompt insertion: store one slot per query template.
