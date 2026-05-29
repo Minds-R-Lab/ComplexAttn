@@ -157,6 +157,12 @@ def main():
     ap.add_argument("--mem_n_templates", type=int, default=1)
     ap.add_argument("--mem_v_weight_decay", type=float, default=0.5)
     ap.add_argument("--mem_v_norm_constraint", type=float, default=4.0)
+    ap.add_argument("--mem_value_optim", choices=["vstar", "lqr", "lqr_gn"], default="vstar",
+                    help="delta_v optimizer for addressable_mem: vstar / lqr / lqr_gn")
+    ap.add_argument("--mem_n_lqr_iters", type=int, default=10,
+                    help="Gauss-Newton LQR iterations; only used when mem_value_optim=lqr_gn (default 10)")
+    ap.add_argument("--mem_lqr_alpha_scale", type=float, default=1.0,
+                    help="Scale on the LQR feedback gain (1.0 = saturate at the box boundary)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -199,7 +205,10 @@ def main():
                       sim_threshold=args.mem_sim_threshold,
                       max_slots=args.mem_max_slots,
                       rewrite_form=args.mem_rewrite_form,
-                      n_templates=args.mem_n_templates)
+                      n_templates=args.mem_n_templates,
+                      value_optim=args.mem_value_optim,
+                      n_lqr_iters=args.mem_n_lqr_iters,
+                      lqr_alpha_scale=args.mem_lqr_alpha_scale)
     else:
         method = cls()
     method.setup(model, tokenizer, kb=None)

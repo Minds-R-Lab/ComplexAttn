@@ -73,7 +73,11 @@ class SHARDMambaWrapper(nn.Module):
     def __init__(self, base_module: nn.Module,
                  sim_threshold: float = 0.7,
                  max_slots: int = 8000,
-                 fire_position: str = "last"):
+                 fire_position: str = "last",
+                 routing: str = "cosine",
+                 write: str = "additive",
+                 eps_init: float = 1.0,
+                 expanding_eps: bool = False):
         super().__init__()
         self.base_module = base_module
         self.sim_threshold = float(sim_threshold)
@@ -81,9 +85,19 @@ class SHARDMambaWrapper(nn.Module):
         if fire_position not in ("last", "all"):
             raise ValueError(f"fire_position must be 'last' or 'all', got {fire_position!r}")
         self.fire_position = fire_position
+        if routing not in ("cosine", "euclidean"):
+            raise ValueError(f"routing must be 'cosine' or 'euclidean', got {routing!r}")
+        self.routing = routing
+        if write not in ("additive", "substitutive"):
+            raise ValueError(f"write must be 'additive' or 'substitutive', got {write!r}")
+        self.write = write
+        self.eps_init = float(eps_init)
+        self.expanding_eps = bool(expanding_eps)
         # Slot storage as plain lists -- bank grows with insertions.
         self.keys: list[torch.Tensor] = []
         self.values: list[torch.Tensor] = []
+        # Per-slot deferral radius for GRACE-style expanding-eps Euclidean routing.
+        self.eps: list[float] = []
         # Optional one-off override of the firing position (set via attribute
         # for insertion-time hooks; we restore None after each fact).
         self._override_fire_pos: Optional[int] = None
@@ -95,8 +109,20 @@ class SHARDMambaWrapper(nn.Module):
     def add_slot(self, k: torch.Tensor, v: torch.Tensor) -> None:
         if self.n_slots >= self.max_slots:
             raise RuntimeError(f"Memory full ({self.n_slots} slots; cap = {self.max_slots})")
+        # GRACE-style expanding-eps: if a new key lands inside an existing slot's
+        # deferral radius, shrink that radius to half the inter-key distance.
+        if self.routing == "euclidean" and self.expanding_eps and self.keys:
+            with torch.no_grad():
+                K = torch.stack(self.keys, dim=0).to(device=k.device).float()
+                k_f = k.detach().float().to(K.device)
+                dists = torch.norm(K - k_f.unsqueeze(0), dim=-1)
+                idx_min = int(dists.argmin().item())
+                d_min = float(dists[idx_min].item())
+                if d_min < self.eps[idx_min]:
+                    self.eps[idx_min] = max(d_min / 2.0, 1e-6)
         self.keys.append(k.detach())
         self.values.append(v.detach())
+        self.eps.append(self.eps_init)
 
     def forward(self, x, *args, **kwargs):
         # x: (batch, seq, d_in) for nn.Linear, but Mamba's in_proj returns the
@@ -125,25 +151,46 @@ class SHARDMambaWrapper(nn.Module):
         K = torch.stack(self.keys, dim=0).to(device=x.device)
         V = torch.stack(self.values, dim=0).to(dtype=base_out.dtype, device=base_out.device)
 
-        # We only apply at the chosen position(s).
         out = base_out.clone()
         for pos in positions:
             x_pos = x[:, pos, :]                          # (batch, d_key)
-            x_n = F.normalize(x_pos.float(), dim=-1)
-            K_n = F.normalize(K.float(), dim=-1)
-            sims = x_n @ K_n.t()                          # (batch, n_slots)
-            best_sim, best_idx = sims.max(dim=-1)         # (batch,) each
-            # Diagnostic: record the highest sim of any batch position.
-            if len(self._diag_max_sim_recent) < 200:
-                self._diag_max_sim_recent.append(float(best_sim.max().item()))
-            hit = (best_sim > self.sim_threshold)
+            if self.routing == "cosine":
+                x_n = F.normalize(x_pos.float(), dim=-1)
+                K_n = F.normalize(K.float(), dim=-1)
+                sims = x_n @ K_n.t()                      # (batch, n_slots), higher = closer
+                best_sim, best_idx = sims.max(dim=-1)
+                if len(self._diag_max_sim_recent) < 200:
+                    self._diag_max_sim_recent.append(float(best_sim.max().item()))
+                hit = (best_sim > self.sim_threshold)
+            else:
+                # Euclidean: closer = smaller distance. Per-slot threshold = eps[i]
+                # (GRACE expanding-eps) when expanding_eps=True, else a flat eps_init.
+                x_f = x_pos.float()
+                K_f = K.float()
+                # (batch, n_slots) pairwise distances
+                dists = torch.cdist(x_f, K_f, p=2.0)
+                best_dist, best_idx = dists.min(dim=-1)
+                if len(self._diag_max_sim_recent) < 200:
+                    self._diag_max_sim_recent.append(float(best_dist.min().item()))
+                if self.expanding_eps:
+                    eps_t = torch.tensor(self.eps, dtype=best_dist.dtype, device=best_dist.device)
+                    per_slot_eps = eps_t[best_idx]
+                    hit = (best_dist < per_slot_eps)
+                else:
+                    hit = (best_dist < self.eps_init)
             if not bool(hit.any()):
                 continue
             self._diag_hits += int(hit.sum().item())
             V_chosen = V[best_idx]                        # (batch, d_value)
-            new_pos = out[:, pos, :] + torch.where(
-                hit.unsqueeze(-1), V_chosen, torch.zeros_like(V_chosen)
-            )
+            if self.write == "additive":
+                new_pos = out[:, pos, :] + torch.where(
+                    hit.unsqueeze(-1), V_chosen, torch.zeros_like(V_chosen)
+                )
+            else:
+                # Substitutive: replace base output with V_chosen where the slot fires.
+                new_pos = torch.where(
+                    hit.unsqueeze(-1), V_chosen, out[:, pos, :]
+                )
             out[:, pos, :] = new_pos
         return out
 
@@ -172,7 +219,11 @@ class SHARDMambaMethod(Method):
                  value_optim: str = "vstar",
                  lqr_lambda: float = 1e-3,
                  lqr_alpha_scale: float = 1.0,
-                 n_lqr_iters: int = 5):
+                 n_lqr_iters: int = 5,
+                 routing: str = "cosine",
+                 write: str = "additive",
+                 eps_init: float = 1.0,
+                 expanding_eps: bool = False):
         if kind not in ("out_proj", "in_proj", "x_proj"):
             raise ValueError(f"kind must be one of out_proj|in_proj|x_proj, got {kind!r}")
         if capture_position not in ("subject_last", "prompt_last"):
@@ -193,6 +244,14 @@ class SHARDMambaMethod(Method):
         self.lqr_lambda = float(lqr_lambda)
         self.lqr_alpha_scale = float(lqr_alpha_scale)
         self.n_lqr_iters = int(n_lqr_iters)
+        if routing not in ("cosine", "euclidean"):
+            raise ValueError(f"routing must be 'cosine' or 'euclidean', got {routing!r}")
+        self.routing = routing
+        if write not in ("additive", "substitutive"):
+            raise ValueError(f"write must be 'additive' or 'substitutive', got {write!r}")
+        self.write = write
+        self.eps_init = float(eps_init)
+        self.expanding_eps = bool(expanding_eps)
 
     # ------------------------------------------------------------------
     def setup(self, model, tokenizer, kb=None):
@@ -209,6 +268,10 @@ class SHARDMambaMethod(Method):
             sim_threshold=self.sim_threshold,
             max_slots=self.max_slots,
             fire_position=self.fire_position,
+            routing=self.routing,
+            write=self.write,
+            eps_init=self.eps_init,
+            expanding_eps=self.expanding_eps,
         ).to(DEVICE)
         self.adapter.install_wrapper(self.layer_idx, self.kind, self.wrapper)
         print(f"[shard-mamba] installed at layer {self.layer_idx} ({self.adapter.family}); "
