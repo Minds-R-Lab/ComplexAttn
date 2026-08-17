@@ -57,22 +57,18 @@ CELLS = {
 }
 
 
-def load_data(bench: str, seed: int, n_edits: int):
-    if bench == "counterfact":
+def load_benchmark_and_eval(benchmark, seed, n_edits):
+    if benchmark == "counterfact":
         from counterfact_data import cf_splits
-        return cf_splits(n_edits=n_edits, seed=seed)
-    else:
-        from zsre_data import zsre_splits
-        return zsre_splits(n_edits=n_edits, seed=seed)
-
-
-def eval_cell(bench: str, model, tokenizer, edits, holdout, tau, layer):
-    if bench == "counterfact":
         from run_counterfact import cf_eval
-        return cf_eval(model, tokenizer, edits, holdout)
-    else:
+        edits, holdout = cf_splits(n_edits=n_edits, seed=seed)
+        return edits, holdout, cf_eval
+    if benchmark == "zsre":
+        from zsre_data import zsre_splits
         from run_zsre import zsre_eval
-        return zsre_eval(model, tokenizer, edits, holdout)
+        edits, holdout = zsre_splits(n_edits=n_edits, seed=seed)
+        return edits, holdout, zsre_eval
+    raise ValueError(f"Unknown benchmark: {benchmark!r}")
 
 
 def main():
@@ -89,6 +85,10 @@ def main():
     ap.add_argument("--eps_l2", type=float, default=None,
                     help="Override the L2 radius. Default = sqrt(2 - 2*tau).")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--batch_size_eval", type=int, default=8)
+    ap.add_argument("--max_new_tokens", type=int, default=16)
+    ap.add_argument("--variants", default="shard,ablate_routing,ablate_routing_l2",
+                    help="Comma-separated subset of variants to run.")
     args = ap.parse_args()
 
     cell = CELLS[args.cell]
@@ -107,16 +107,19 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    edits, holdout = load_data(bench, args.seed, args.n_edits)
+    edits, holdout, eval_fn = load_benchmark_and_eval(bench, args.seed, args.n_edits)
     print(f"[r4_l2] {len(edits)} edits, {len(holdout)} holdout")
 
     # Three routing variants against a single model reload each, so
     # nothing leaks across variants.
-    variants = [
-        ("shard",             {"routing": "cosine",       "sim_threshold": args.tau, "eps_init": 1.0}),
-        ("ablate_routing",    {"routing": "euclidean",    "sim_threshold": 0.0,      "eps_init": 1.0}),
-        ("ablate_routing_l2", {"routing": "euclidean_l2", "sim_threshold": 0.0,      "eps_init": eps_l2}),
-    ]
+    all_variants = {
+        "shard":             {"routing": "cosine",       "sim_threshold": args.tau, "eps_init": 1.0},
+        "ablate_routing":    {"routing": "euclidean",    "sim_threshold": 0.0,      "eps_init": 1.0},
+        "ablate_routing_l2": {"routing": "euclidean_l2", "sim_threshold": 0.0,      "eps_init": eps_l2},
+    }
+    requested = [v.strip() for v in args.variants.split(",") if v.strip()]
+    variants = [(name, all_variants[name]) for name in requested if name in all_variants]
+    print(f"[r4_l2] running variants: {[v for v, _ in variants]}")
 
     out = {
         "cell": args.cell, "benchmark": bench, "model": model_id,
@@ -125,7 +128,23 @@ def main():
         "rows": [],
     }
 
+    # If a partial output file already exists (previous run crashed mid-way),
+    # resume from it and skip variants we've already recorded.
+    existing_variants: set[str] = set()
+    if Path(args.out).exists():
+        try:
+            prior = json.loads(Path(args.out).read_text())
+            out["rows"] = prior.get("rows", [])
+            existing_variants = {r.get("variant") for r in out["rows"]}
+            print(f"[r4_l2] resuming from {args.out}; already have "
+                  f"{sorted(existing_variants)}")
+        except Exception as e:
+            print(f"[r4_l2] could not resume existing file: {e!r}")
+
     for name, kwargs in variants:
+        if name in existing_variants:
+            print(f"[r4_l2] SKIP {name} (already in {args.out})")
+            continue
         print(f"\n[r4_l2] --- variant {name} ---")
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
@@ -134,8 +153,8 @@ def main():
         )
         model.eval()
 
-        preset = {"write_mode": "additive", "value_optim": "vstar"}
-        preset.update({k: v for k, v in kwargs.items() if k in ("routing",)})
+        preset = {"write_mode": "additive", "value_optim": "vstar",
+                  "routing": kwargs["routing"]}
         method = AblatedSHARDMethod(
             layer_idx=layer,
             v_steps=200, v_lr=1.0,
@@ -152,15 +171,35 @@ def main():
             if i % 100 == 0:
                 print(f"   inserted {i}/{len(edits)}  ({(time.time()-t0)/60:.1f} min)")
 
-        m = eval_cell(bench, model, tokenizer, edits, holdout, args.tau, layer)
+        # Correct eval signature (per r3_scaling_multiseed.py):
+        # cf_eval(model, tokenizer, edits_seen=..., holdout=...,
+        #         batch_size=..., max_new_tokens=...)
+        # returns nested dict: result["efficacy"|"generalization"|"specificity"]["accuracy"]
+        try:
+            result = eval_fn(
+                model, tokenizer,
+                edits_seen=edits, holdout=holdout,
+                batch_size=args.batch_size_eval,
+                max_new_tokens=args.max_new_tokens,
+            )
+            eff = float(result["efficacy"]["accuracy"])
+            gen = float(result["generalization"]["accuracy"])
+            spec = float(result["specificity"]["accuracy"])
+        except Exception as e:
+            print(f"[r4_l2] EVAL FAILED for {name}: {e!r}")
+            eff = gen = spec = float("nan")
+            result = None
         row = {"variant": name, **kwargs,
-               "Eff": float(m.get("Eff", m.get("eff", 0.0))),
-               "Gen": float(m.get("Gen", m.get("gen", 0.0))),
-               "Spec": float(m.get("Spec", m.get("spec", 0.0))),
+               "Eff": eff, "Gen": gen, "Spec": spec,
                "wall_s": time.time() - t0}
         print(f"[r4_l2] {name}: Eff={row['Eff']:.4f}  "
               f"Gen={row['Gen']:.4f}  Spec={row['Spec']:.4f}")
         out["rows"].append(row)
+
+        # Persist after every variant, so a crash never loses prior work.
+        with open(args.out, "w") as f:
+            json.dump(out, f, indent=2)
+        print(f"[r4_l2] partial save -> {args.out}")
 
         del model, method
         torch.cuda.empty_cache()
