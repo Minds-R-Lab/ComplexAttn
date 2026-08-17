@@ -146,11 +146,10 @@ def main():
             print(f"[r4_l2] SKIP {name} (already in {args.out})")
             continue
         print(f"\n[r4_l2] --- variant {name} ---")
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            torch_dtype=(torch.float16 if DEVICE.type == "cuda" else torch.float32),
-            device_map="auto",
-        )
+        # Match r3_scaling_multiseed.py exactly: default (fp32) load + .to(DEVICE).
+        # fp16 + device_map=auto caused cosine routing to miss on every query
+        # in a previous run of this script (Eff = 0), so we do not use it.
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(DEVICE)
         model.eval()
 
         preset = {"write_mode": "additive", "value_optim": "vstar",
@@ -194,6 +193,14 @@ def main():
                "wall_s": time.time() - t0}
         print(f"[r4_l2] {name}: Eff={row['Eff']:.4f}  "
               f"Gen={row['Gen']:.4f}  Spec={row['Spec']:.4f}")
+        # Sanity check: the `shard` variant is known to reach Eff ~= 1.0 on
+        # both cells (Table 1 of the R1 manuscript). If it is much lower,
+        # something is wrong with the pipeline (fp16 quantisation, wrong
+        # layer, hook attach failure). Warn loudly.
+        if name == "shard" and eff < 0.5:
+            print(f"[r4_l2] WARNING: shard Eff={eff:.4f} is far below the "
+                  f"expected ~1.0. Do NOT trust the other variants until "
+                  f"this is fixed.")
         out["rows"].append(row)
 
         # Persist after every variant, so a crash never loses prior work.
