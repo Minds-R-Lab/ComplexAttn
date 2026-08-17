@@ -52,8 +52,8 @@ class AblatedSHARDWrapper(nn.Module):
                  eps_init: float = 1.0):
         super().__init__()
         self.base_mlp = base_mlp
-        if routing not in ("cosine", "euclidean"):
-            raise ValueError(f"routing must be cosine|euclidean, got {routing!r}")
+        if routing not in ("cosine", "euclidean", "euclidean_l2"):
+            raise ValueError(f"routing must be cosine|euclidean|euclidean_l2, got {routing!r}")
         if write_mode not in ("additive", "substitutive"):
             raise ValueError(f"write_mode must be additive|substitutive, got {write_mode!r}")
         self.routing = routing
@@ -87,7 +87,19 @@ class AblatedSHARDWrapper(nn.Module):
             sims = x_n @ K_n.t()                              # (batch, n)
             best_sim, best_idx = sims.max(dim=-1)
             hit = (best_sim > self.sim_threshold)
-        else:  # euclidean
+        elif self.routing == "euclidean_l2":
+            # Reviewer #4 control: L2-normalise both sides, then Euclidean.
+            # For unit vectors, ||x-y||^2 = 2 - 2 cos(x,y), so this is
+            # equivalent to cosine routing up to a monotone transformation:
+            # any tau cosine threshold maps to eps_l2 = sqrt(2 - 2 tau).
+            # The threshold we sweep is still `eps_init` (interpreted as a
+            # radius in the unit sphere).
+            x_n = F.normalize(x_last.float(), dim=-1)
+            K_n = F.normalize(K.float(), dim=-1)
+            dists = torch.cdist(x_n, K_n)                     # (batch, n)
+            best_dist, best_idx = dists.min(dim=-1)
+            hit = (best_dist < self.eps_init)
+        else:  # euclidean (raw, magnitude-sensitive)
             x_f = x_last.float()
             K_f = K.float()
             dists = torch.cdist(x_f, K_f)                     # (batch, n)
@@ -273,11 +285,18 @@ class AblatedSHARDMethod(Method):
 # ---------------------------------------------------------------------------
 
 ABLATION_PRESETS: dict[str, dict[str, str]] = {
-    "shard":          {"routing": "cosine",    "write_mode": "additive",     "value_optim": "vstar"},
-    "ablate_routing": {"routing": "euclidean", "write_mode": "additive",     "value_optim": "vstar"},
-    "ablate_write":   {"routing": "cosine",    "write_mode": "substitutive", "value_optim": "vstar"},
-    "ablate_optim":   {"routing": "cosine",    "write_mode": "additive",     "value_optim": "vanilla_ft"},
-    "all_grace":      {"routing": "euclidean", "write_mode": "substitutive", "value_optim": "vanilla_ft"},
+    "shard":          {"routing": "cosine",       "write_mode": "additive",     "value_optim": "vstar"},
+    "ablate_routing": {"routing": "euclidean",    "write_mode": "additive",     "value_optim": "vstar"},
+    # R4.2 control -- L2-normalised Euclidean, mathematically equivalent to
+    # cosine on the unit sphere. If SHARD's advantage is really "cosine as a
+    # routing principle", this preset should match `shard`. If the advantage
+    # is only that activation magnitude is a nuisance variable, this preset
+    # should also match `shard` and the story simplifies to "normalise before
+    # you route". Either outcome is publishable.
+    "ablate_routing_l2": {"routing": "euclidean_l2", "write_mode": "additive",  "value_optim": "vstar"},
+    "ablate_write":   {"routing": "cosine",       "write_mode": "substitutive", "value_optim": "vstar"},
+    "ablate_optim":   {"routing": "cosine",       "write_mode": "additive",     "value_optim": "vanilla_ft"},
+    "all_grace":      {"routing": "euclidean",    "write_mode": "substitutive", "value_optim": "vanilla_ft"},
 }
 
 
