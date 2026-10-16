@@ -71,21 +71,14 @@ def load_mquake(n_items: int, seed: int):
           "answer_alias": [ str, ... ],
         }
     """
-    try:
-        from datasets import load_dataset
-        ds = load_dataset("yuan-tian/MQuAKE", "cf-3k", split="train")
-    except Exception as e:
-        raise RuntimeError(
-            f"MQuAKE download failed: {e!r}\n"
-            "Alternative: clone the MQuAKE repo "
-            "(https://github.com/princeton-nlp/MQuAKE) and point this loader "
-            "at datasets/MQuAKE-CF-3k.json."
-        )
-    import random
+    import json, random
+    from pathlib import Path
+    JSON_PATH = Path(__file__).parent.parent / "mquake_repo" / "datasets" / "MQuAKE-CF-3k.json"
+    with open(JSON_PATH) as fh:
+        items = json.load(fh)
     rng = random.Random(seed)
-    idx = list(range(len(ds)))
-    rng.shuffle(idx)
-    return [ds[i] for i in idx[:n_items]]
+    rng.shuffle(items)
+    return items[:n_items]
 
 
 def score_multihop(generated: str, correct_answers: list[str]) -> bool:
@@ -96,12 +89,19 @@ def score_multihop(generated: str, correct_answers: list[str]) -> bool:
 
 class EditTriple:
     """Minimal shim so SHARDMambaMethod.insert() accepts an MQuAKE
-    'requested_rewrite' dict as if it were a CounterFact record."""
+    'requested_rewrite' dict as if it were a CounterFact record.
+
+    MQuAKE schema: prompt is a template string with '{}' placeholder for the
+    subject; target_new and target_true are dicts {'str': ..., 'id': ...}.
+    We unwrap the dicts and expand the template so downstream code gets a
+    plain prompt string."""
     def __init__(self, rr):
-        self.prompt_template = rr["prompt"]
+        self.prompt_template = rr["prompt"].format(rr["subject"])
         self.subject = rr["subject"]
-        self.target_new = rr["target_new"]
-        self.target_true = rr.get("target_true", "")
+        tn = rr["target_new"]
+        tt = rr.get("target_true", "")
+        self.target_new = tn["str"] if isinstance(tn, dict) else tn
+        self.target_true = tt["str"] if isinstance(tt, dict) else tt
 
 
 def main():
@@ -129,11 +129,17 @@ def main():
     method = SHARDMambaMethod(
         layer_idx=args.layer, kind="out_proj",
         sim_threshold=args.tau,
-        v_steps=args.v_steps, v_lr=1.0,
+        n_v_steps=args.v_steps, v_lr=1.0,
         v_weight_decay=0.0, v_norm_constraint=20.0,
         capture_position="prompt_last", fire_position="last",
     )
     method.setup(model, tokenizer, kb=None)
+
+    # Monkey-patch _build_rewrite to handle MQuAKE's EditTriple format
+    # (the default realdata patch only recognises CounterFact/zsRE triples).
+    def _mquake_build_rewrite(self, triple):
+        return triple.prompt_template, triple.target_new, triple.subject
+    method._build_rewrite = _mquake_build_rewrite.__get__(method, type(method))
 
     per_item = []
     hits_singlehop = 0
