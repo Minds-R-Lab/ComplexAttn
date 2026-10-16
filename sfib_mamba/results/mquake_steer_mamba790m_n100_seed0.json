@@ -1,0 +1,814 @@
+{
+  "method": "steer",
+  "benchmark": "mquake-cf-3k",
+  "model": "state-spaces/mamba-790m-hf",
+  "layer": 32,
+  "seed": 0,
+  "n_items": 100,
+  "singlehop_accuracy": 1.0,
+  "multihop_accuracy": 0.12666666666666668,
+  "n_items_processed": 100,
+  "wall_s": 5796.38307929039,
+  "per_item": [
+    {
+      "case_id": 2640,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 3,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 248,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2121,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 825,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2014,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 713,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1872,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 2,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 562,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 595,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1554,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1291,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1655,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 681,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1162,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 3,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1997,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2526,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2752,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 696,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 606,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1946,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 2,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1485,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 819,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1613,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 612,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 21,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 558,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2572,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 2,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2763,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2326,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 3,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1899,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2115,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 616,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1083,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1621,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2698,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1212,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2101,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 98,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2453,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 975,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2377,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2712,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1426,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1054,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1897,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 210,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 311,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2751,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1036,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 424,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 714,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2702,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 470,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 2,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2936,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 462,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 723,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 912,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2628,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1178,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2835,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 3,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 879,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 618,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2423,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 82,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2408,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2741,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2318,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 589,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1152,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 241,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1100,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2960,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1948,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 3,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 39,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2145,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2041,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 367,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 592,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1832,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2238,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 2,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 715,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1906,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1068,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 431,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 797,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1297,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 586,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 658,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2316,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 738,
+      "n_edits": 1,
+      "singlehop_hits": 1,
+      "singlehop_total": 1,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 439,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2759,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 546,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2620,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2513,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2312,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2087,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2938,
+      "n_edits": 4,
+      "singlehop_hits": 4,
+      "singlehop_total": 4,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 1272,
+      "n_edits": 2,
+      "singlehop_hits": 2,
+      "singlehop_total": 2,
+      "multihop_hits": 0,
+      "multihop_total": 3
+    },
+    {
+      "case_id": 2742,
+      "n_edits": 3,
+      "singlehop_hits": 3,
+      "singlehop_total": 3,
+      "multihop_hits": 1,
+      "multihop_total": 3
+    }
+  ]
+}

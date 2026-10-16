@@ -1,0 +1,144 @@
+{
+  "benchmark": "counterfact",
+  "model": "state-spaces/mamba-790m-hf",
+  "method": "shard_mamba",
+  "seed": 2,
+  "n_edits": 500,
+  "n_holdout": 500,
+  "layer": 32,
+  "kind": "out_proj",
+  "v_steps": 200,
+  "v_lr": 1.0,
+  "v_weight_decay": 0.0,
+  "v_norm_constraint": 20.0,
+  "sim_threshold": 0.7,
+  "capture_position": "prompt_last",
+  "fire_position": "last",
+  "value_optim": "vstar",
+  "lqr_lambda": 0.001,
+  "lqr_alpha_scale": 1.0,
+  "n_lqr_iters": 5,
+  "n_slots_final": 500,
+  "wall_time_stream_s": 11462.349596738815,
+  "results": [
+    {
+      "N": 0,
+      "efficacy": {
+        "n": 0,
+        "accuracy": null
+      },
+      "generalization": {
+        "n": 0,
+        "accuracy": null
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.258
+      },
+      "n_slots": 0,
+      "tag": "pre-edit"
+    },
+    {
+      "N": 1,
+      "efficacy": {
+        "n": 1,
+        "accuracy": 1.0
+      },
+      "generalization": {
+        "n": 2,
+        "accuracy": 0.0
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.258
+      },
+      "n_slots": 1,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 10,
+      "efficacy": {
+        "n": 10,
+        "accuracy": 1.0
+      },
+      "generalization": {
+        "n": 20,
+        "accuracy": 0.1
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.232
+      },
+      "n_slots": 10,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 50,
+      "efficacy": {
+        "n": 50,
+        "accuracy": 1.0
+      },
+      "generalization": {
+        "n": 100,
+        "accuracy": 0.12
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.2
+      },
+      "n_slots": 50,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 100,
+      "efficacy": {
+        "n": 100,
+        "accuracy": 1.0
+      },
+      "generalization": {
+        "n": 200,
+        "accuracy": 0.15
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.192
+      },
+      "n_slots": 100,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 250,
+      "efficacy": {
+        "n": 250,
+        "accuracy": 1.0
+      },
+      "generalization": {
+        "n": 500,
+        "accuracy": 0.154
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.172
+      },
+      "n_slots": 250,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 500,
+      "efficacy": {
+        "n": 500,
+        "accuracy": 1.0
+      },
+      "generalization": {
+        "n": 1000,
+        "accuracy": 0.12
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.19
+      },
+      "n_slots": 500,
+      "tag": "post-insertion"
+    }
+  ]
+}

@@ -1,0 +1,421 @@
+{
+  "model": "state-spaces/mamba-790m-hf",
+  "seed": 0,
+  "n_edits_stream": 500,
+  "n_chains_tested": 18,
+  "n_e1_inserted": 18,
+  "layer": 32,
+  "value_optim": "vstar",
+  "base_compose": {
+    "accuracy": 0.0,
+    "n": 18,
+    "per_chain": [
+      {
+        "case_ids": [
+          31,
+          4072
+        ],
+        "s1": "controller.controller",
+        "o_new": "Singapore",
+        "expected": "Tamil",
+        "generation": " that the controller is a place where they can go to get information about the w",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          3680,
+          809
+        ],
+        "s1": "Islamabad",
+        "o_new": "Kiev",
+        "expected": "Athens",
+        "generation": " Islamabad. X is a twin city of Islamabad. X is a twin",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          1068,
+          17779
+        ],
+        "s1": "Delhi Technological University",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " located in the north-west of Delhi. The city is known for its rich",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          2903,
+          14559
+        ],
+        "s1": "Bilohirsk Raion",
+        "o_new": "Estonia",
+        "expected": "NATO",
+        "generation": " the Ukrainian Nationalist Party.\n\nReferences\n\nCategory:Ukrainian nationalism",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          16879,
+          17779
+        ],
+        "s1": "Cook da Books",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a place where the two worlds of the two books meet. The two worlds are",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          19616,
+          17779
+        ],
+        "s1": "Minnesota Strikers",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a suburb of Minneapolis, Minnesota. The X is a suburb of Minneapolis, Minnesota",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          8298,
+          17409
+        ],
+        "s1": "Sora Ltd.",
+        "o_new": "Chicago",
+        "expected": "Toronto",
+        "generation": " the city of Tokyo, Japan.\n\nThe city is also known as the",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          4852,
+          11327
+        ],
+        "s1": "Beaumont Palace",
+        "o_new": "Madrid",
+        "expected": "Havana",
+        "generation": " Beaumont, Texas.\n\nReferences\n\nCategory:Villages in",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          17663,
+          10489
+        ],
+        "s1": "San Francisco",
+        "o_new": "Budapest",
+        "expected": "Frankfurt",
+        "generation": " a place known as Y. The twin city of Y is a place known as",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          6985,
+          17779
+        ],
+        "s1": "Leopold Stokowski",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a city in the state of Gujarat, India.\n\nThe city",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          17226,
+          809
+        ],
+        "s1": "Rolex",
+        "o_new": "Kiev",
+        "expected": "Athens",
+        "generation": " Geneva, Switzerland. The city is located in the canton of Vaud,",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          20042,
+          17409
+        ],
+        "s1": "Marilyn Agency",
+        "o_new": "Chicago",
+        "expected": "Toronto",
+        "generation": " the city of Xinglong, which is the capital of the province of Sh",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          10489,
+          17779
+        ],
+        "s1": "Budapest",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a place known as Y. The twin city of Y is a place known as",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          11327,
+          809
+        ],
+        "s1": "Madrid",
+        "o_new": "Kiev",
+        "expected": "Athens",
+        "generation": " a place known as Y. X is a twin city of a place known as",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          20764,
+          15314
+        ],
+        "s1": "Justin Trudeau",
+        "o_new": "Vienna",
+        "expected": "Budapest",
+        "generation": " a place where the Canadian government has been trying to build a new airport. T",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          10097,
+          15314
+        ],
+        "s1": "John Redmond",
+        "o_new": "Vienna",
+        "expected": "Budapest",
+        "generation": " a place where the Irish and the English live together. The Irish are the people",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          472,
+          11327
+        ],
+        "s1": "Muthulakshmi Reddi",
+        "o_new": "Madrid",
+        "expected": "Havana",
+        "generation": " Bengaluru.\n\nReferences\n\nCategory:Villages in Uttara K",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          15995,
+          11073
+        ],
+        "s1": "The Damnwells",
+        "o_new": "Montreal",
+        "expected": "Shanghai",
+        "generation": " a place called Y.\n\nThe Damnwells, that originated in",
+        "hit": false
+      }
+    ]
+  },
+  "steer_compose": {
+    "accuracy": 0.0,
+    "n": 18,
+    "per_chain": [
+      {
+        "case_ids": [
+          31,
+          4072
+        ],
+        "s1": "controller.controller",
+        "o_new": "Singapore",
+        "expected": "Tamil",
+        "generation": " that the controller is a place where they can go to get information about the w",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          3680,
+          809
+        ],
+        "s1": "Islamabad",
+        "o_new": "Kiev",
+        "expected": "Athens",
+        "generation": " Islamabad. X is a twin city of Islamabad. X is a twin",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          1068,
+          17779
+        ],
+        "s1": "Delhi Technological University",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " located in the north-west of Delhi. The city is known for its rich",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          2903,
+          14559
+        ],
+        "s1": "Bilohirsk Raion",
+        "o_new": "Estonia",
+        "expected": "NATO",
+        "generation": " the Ukrainian Nationalist Party.\n\nReferences\n\nCategory:Ukrainian nationalism",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          16879,
+          17779
+        ],
+        "s1": "Cook da Books",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a place where the two worlds of the two books meet. The two worlds are",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          19616,
+          17779
+        ],
+        "s1": "Minnesota Strikers",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a suburb of Minneapolis, Minnesota. The X is a suburb of Minneapolis, Minnesota",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          8298,
+          17409
+        ],
+        "s1": "Sora Ltd.",
+        "o_new": "Chicago",
+        "expected": "Toronto",
+        "generation": " the city of Tokyo, Japan.\n\nThe city is also known as the",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          4852,
+          11327
+        ],
+        "s1": "Beaumont Palace",
+        "o_new": "Madrid",
+        "expected": "Havana",
+        "generation": " Beaumont, Texas.\n\nReferences\n\nCategory:Villages in",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          17663,
+          10489
+        ],
+        "s1": "San Francisco",
+        "o_new": "Budapest",
+        "expected": "Frankfurt",
+        "generation": " a place known as Y. The twin city of Y is a place known as",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          6985,
+          17779
+        ],
+        "s1": "Leopold Stokowski",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a city in the state of Gujarat, India.\n\nThe city",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          17226,
+          809
+        ],
+        "s1": "Rolex",
+        "o_new": "Kiev",
+        "expected": "Athens",
+        "generation": " Geneva, Switzerland. The city is located in the canton of Vaud,",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          20042,
+          17409
+        ],
+        "s1": "Marilyn Agency",
+        "o_new": "Chicago",
+        "expected": "Toronto",
+        "generation": " the city of Xinglong, which is the capital of the province of Sh",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          10489,
+          17779
+        ],
+        "s1": "Budapest",
+        "o_new": "Moscow",
+        "expected": "Jerusalem",
+        "generation": " a place known as Y. The twin city of Y is a place known as",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          11327,
+          809
+        ],
+        "s1": "Madrid",
+        "o_new": "Kiev",
+        "expected": "Athens",
+        "generation": " a place known as Y. X is a twin city of a place known as",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          20764,
+          15314
+        ],
+        "s1": "Justin Trudeau",
+        "o_new": "Vienna",
+        "expected": "Budapest",
+        "generation": " a place where the Canadian government has been trying to build a new airport. T",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          10097,
+          15314
+        ],
+        "s1": "John Redmond",
+        "o_new": "Vienna",
+        "expected": "Budapest",
+        "generation": " a place where the Irish and the English live together. The Irish are the people",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          472,
+          11327
+        ],
+        "s1": "Muthulakshmi Reddi",
+        "o_new": "Madrid",
+        "expected": "Havana",
+        "generation": " Bengaluru.\n\nReferences\n\nCategory:Villages in Uttara K",
+        "hit": false
+      },
+      {
+        "case_ids": [
+          15995,
+          11073
+        ],
+        "s1": "The Damnwells",
+        "o_new": "Montreal",
+        "expected": "Shanghai",
+        "generation": " a place called Y.\n\nThe Damnwells, that originated in",
+        "hit": false
+      }
+    ]
+  },
+  "compose_gap": 0.0,
+  "wall_time_eval_base_s": 8.380813121795654,
+  "wall_time_eval_edit_s": 8.286197900772095,
+  "wall_time_insertion_s": 405.10497760772705
+}

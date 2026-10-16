@@ -1,0 +1,137 @@
+{
+  "benchmark": "zsre",
+  "model": "state-spaces/mamba-2.8b-hf",
+  "method": "grace_mamba",
+  "seed": 0,
+  "n_edits": 500,
+  "n_holdout": 500,
+  "layer": 39,
+  "kind": "out_proj",
+  "n_steps": 100,
+  "lr": 1.0,
+  "eps_init": 1.0,
+  "init": "zeros",
+  "n_slots_final": 500,
+  "wall_time_stream_s": 11152.554069519043,
+  "results": [
+    {
+      "N": 0,
+      "efficacy": {
+        "n": 0,
+        "accuracy": null
+      },
+      "generalization": {
+        "n": 0,
+        "accuracy": null
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.022
+      },
+      "n_slots": 0,
+      "tag": "pre-edit"
+    },
+    {
+      "N": 1,
+      "efficacy": {
+        "n": 1,
+        "accuracy": 1.0
+      },
+      "generalization": {
+        "n": 1,
+        "accuracy": 0.0
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.022
+      },
+      "n_slots": 1,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 10,
+      "efficacy": {
+        "n": 10,
+        "accuracy": 0.9
+      },
+      "generalization": {
+        "n": 10,
+        "accuracy": 0.0
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.022
+      },
+      "n_slots": 10,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 50,
+      "efficacy": {
+        "n": 50,
+        "accuracy": 0.98
+      },
+      "generalization": {
+        "n": 50,
+        "accuracy": 0.0
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.022
+      },
+      "n_slots": 50,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 100,
+      "efficacy": {
+        "n": 100,
+        "accuracy": 0.99
+      },
+      "generalization": {
+        "n": 100,
+        "accuracy": 0.0
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.022
+      },
+      "n_slots": 100,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 250,
+      "efficacy": {
+        "n": 250,
+        "accuracy": 0.996
+      },
+      "generalization": {
+        "n": 250,
+        "accuracy": 0.016
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.022
+      },
+      "n_slots": 250,
+      "tag": "post-insertion"
+    },
+    {
+      "N": 500,
+      "efficacy": {
+        "n": 500,
+        "accuracy": 0.994
+      },
+      "generalization": {
+        "n": 500,
+        "accuracy": 0.026
+      },
+      "specificity": {
+        "n": 500,
+        "accuracy": 0.022
+      },
+      "n_slots": 500,
+      "tag": "post-insertion"
+    }
+  ]
+}
