@@ -1,146 +1,118 @@
 #!/usr/bin/env bash
 # =============================================================================
 # R2 revision -- Reviewer 1 point R1.5b
-# Multi-seed re-run of the five-preset ablation (Section 6.5, Table 9).
+# Multi-seed re-run of the 5-preset ablation (manuscript Section 6.5, Table 9).
 #
-# R1 reported the ablation at seed 0 only. Seed noise on the STEER CF cell is
-# ~0.0025 SEM (Table 6 after R1.5c correction), so the single-seed difference
-# between pure_steer (Gen=0.125) and ablate_optim (Gen=0.126) is within noise
-# and does not discriminate value-optimizer choice. The reviewer asked for the
-# three-seed run to confirm the ordering.
+# R1 produced seed-0 only for the 5-preset Mamba ablation on
+# Mamba-790M + CounterFact. Reviewer 1 asks for the three-seed ordering
+# since the pure_steer vs ablate_optim gap (0.125 vs 0.126 Gen) is below
+# the ~0.0025 seed SEM observed on the STEER CF cell (Table 6).
 #
-# Grid: 5 presets x 3 seeds = 15 runs on Mamba-790M + CounterFact, N = 500.
+# We re-run only seeds 1 and 2 across the 5 presets; the seed-0 JSONs
+# already live under sfib_mamba/results/counterfact_mamba_ablation_*
+# _mamba790m_seed0.json and the runner auto-skips them. Entry point is
+# the existing sfib_mamba/run_mamba_ablations.py, which exposes
+# --preset {shard, ablate_routing, ablate_write, ablate_optim, all_grace}.
 #
-# The 5 presets (routing | write | value-optimizer):
-#   pure_steer     = cosine    | additive    | v_star (default STEER)
-#   ablate_routing = euclidean | additive    | v_star
-#   ablate_write   = cosine    | substitute  | v_star
-#   ablate_optim   = cosine    | additive    | finetune
-#   all_grace      = euclidean | substitute  | finetune  (= GRACE-for-Mamba)
-#
-# Wall-clock: 15 runs x ~2 h each = ~30 hours on one H100.
-# Recommend running inside tmux or with nohup.
-#
-# Output: $RESULTS_DIR/r2_08/preset_<name>_seed_<s>.json (15 files)
-#         $RESULTS_DIR/r2_08/multi_seed_table.json (consolidated mean ± SEM)
+# Wall-clock: 5 presets x 2 new seeds = 10 runs at ~3 h each = ~30 h on
+# one H100-80GB. Run under tmux or nohup.
 # =============================================================================
 
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-$HOME/ComplexAttn}"
-RESULTS_DIR="${RESULTS_DIR:-$REPO_ROOT/results_r2}"
-OUT_DIR="$RESULTS_DIR/r2_08"
-mkdir -p "$OUT_DIR"
+REPO_ROOT="${REPO_ROOT:-$HOME/ComplexAttn/ComplexAttn}"
 
-cd "$REPO_ROOT"
-export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
+if [[ -z "${VIRTUAL_ENV:-}" ]]; then
+  for CAND in "$HOME/env/bin/activate" "$REPO_ROOT/.venv/bin/activate" "$HOME/ComplexAttn/env/bin/activate"; do
+    if [[ -f "$CAND" ]]; then source "$CAND"; break; fi
+  done
+fi
+
+cd "$REPO_ROOT/sfib_mamba"
+mkdir -p results
+
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-echo "[r2_08] $(date -Iseconds) start: 5-preset ablation x 3 seeds on Mamba-790M + CF"
-
-# Preset -> (routing, write, optim)
-declare -A PRESET_ROUTING=(
-  [pure_steer]="cosine"     [ablate_routing]="euclidean" [ablate_write]="cosine"
-  [ablate_optim]="cosine"   [all_grace]="euclidean"
-)
-declare -A PRESET_WRITE=(
-  [pure_steer]="additive"   [ablate_routing]="additive"  [ablate_write]="substitute"
-  [ablate_optim]="additive" [all_grace]="substitute"
-)
-declare -A PRESET_OPTIM=(
-  [pure_steer]="v_star"     [ablate_routing]="v_star"    [ablate_write]="v_star"
-  [ablate_optim]="finetune" [all_grace]="finetune"
-)
+MODEL="state-spaces/mamba-790m-hf"
+LAYER=32
+N_EDITS=500
+BENCH=counterfact
 
 run_cell () {
-    local preset="$1"
-    local seed="$2"
-    local out_json="$OUT_DIR/preset_${preset}_seed_${seed}.json"
-
-    if [[ -f "$out_json" ]]; then
-        echo "[r2_08]   skip (exists): $preset / seed=$seed"
-        return 0
-    fi
-
-    echo "[r2_08]   run: $preset / seed=$seed  ($(date -Iseconds))"
-    python -u -m shard_mamba.run_steer \
-        --model_name "state-spaces/mamba-790m-hf" \
-        --dataset "counterfact" \
-        --data_path "data/counterfact/counterfact-edit.json" \
-        --N 500 \
-        --seed "$seed" \
-        --edit_layer 32 \
-        --edit_module "w_o" \
-        --routing "${PRESET_ROUTING[$preset]}" \
-        --write_mode "${PRESET_WRITE[$preset]}" \
-        --value_optim "${PRESET_OPTIM[$preset]}" \
-        --tau 0.70 \
-        --gamma 20 \
-        --epsilon_init 1.0 \
-        --epsilon_expand 0.1 \
-        --v_steps 25 \
-        --v_lr 5e-1 \
-        --finetune_lr 1e-3 \
-        --finetune_steps 25 \
-        --metrics "eff,gen,spec" \
-        --out_json "$out_json"
+  local PRESET=$1 SEED=$2
+  local OUT="results/${BENCH}_mamba_ablation_${PRESET}_mamba790m_seed${SEED}.json"
+  if [[ -f "$OUT" ]]; then
+    echo "[r2_08] skip (exists): $OUT"
+    return 0
+  fi
+  echo "============================================================="
+  echo "[r2_08] preset=${PRESET}  seed=${SEED}  $(date -Iseconds)"
+  echo "============================================================="
+  python -u run_mamba_ablations.py \
+    --benchmark "$BENCH" --model "$MODEL" --seed "$SEED" --n_edits "$N_EDITS" \
+    --layer "$LAYER" \
+    --preset "$PRESET" \
+    --out "$OUT"
 }
 
-for preset in pure_steer ablate_routing ablate_write ablate_optim all_grace; do
-    for seed in 0 1 2; do
-        run_cell "$preset" "$seed"
-    done
+echo "[r2_08] $(date -Iseconds) start: 5-preset ablation x seeds {1,2} on Mamba-790M + CF"
+echo "[r2_08] venv: ${VIRTUAL_ENV:-<none>}"
+echo "[r2_08] cwd:  $(pwd)"
+
+for SEED in 1 2; do
+  for PRESET in shard ablate_routing ablate_write ablate_optim all_grace; do
+    run_cell "$PRESET" "$SEED"
+  done
 done
 
-# Consolidate: mean ± SEM per preset
-echo "[r2_08] consolidating multi-seed grid into $OUT_DIR/multi_seed_table.json"
+echo
+echo "============================================================="
+echo "[r2_08] multi-seed 5-preset summary at N=500 (CF, Mamba-790M):"
+echo "============================================================="
 python - <<'PY'
-import glob, json, math, os, re, statistics
-out_dir = os.environ["OUT_DIR"]
-by_preset = {}
-for p in sorted(glob.glob(os.path.join(out_dir, "preset_*_seed_*.json"))):
-    m = re.match(r"preset_(.+?)_seed_(\d+)\.json", os.path.basename(p))
-    preset, seed = m.group(1), int(m.group(2))
-    with open(p) as f:
-        d = json.load(f)
-    row = {
-        "eff":  d["eff_at_N"][str(500)]  if "eff_at_N"  in d else d["eff"],
-        "gen":  d["gen_at_N"][str(500)]  if "gen_at_N"  in d else d["gen"],
-        "spec": d["spec_at_N"][str(500)] if "spec_at_N" in d else d["spec"],
-    }
-    by_preset.setdefault(preset, []).append(row)
+import glob, json, math, statistics as st
+import os
+from collections import defaultdict
 
-def mean_sem(xs):
-    m = statistics.mean(xs)
-    s = statistics.stdev(xs) if len(xs) > 1 else 0.0
-    sem = s / math.sqrt(len(xs))
-    return m, sem
+by_preset = defaultdict(list)
+for p in sorted(glob.glob("results/counterfact_mamba_ablation_*_mamba790m_seed*.json")):
+    # filename: counterfact_mamba_ablation_<preset>_mamba790m_seed<S>.json
+    name = os.path.basename(p)
+    rest = name.replace("counterfact_mamba_ablation_", "").replace("_mamba790m_seed", "|")
+    preset, tail = rest.split("|")
+    seed = int(tail.split(".")[0])
+    with open(p) as fh: d = json.load(fh)
+    r = next((r for r in d.get("results", []) if r.get("N") == 500), None)
+    if r is None: continue
+    by_preset[preset].append((
+        seed,
+        r["efficacy"]["accuracy"],
+        r["generalization"]["accuracy"],
+        r["specificity"]["accuracy"],
+    ))
 
-summary = {}
-for preset, rows in by_preset.items():
-    out = {}
-    for k in ("eff", "gen", "spec"):
-        m, sem = mean_sem([r[k] for r in rows])
-        out[f"{k}_mean"], out[f"{k}_sem"] = m, sem
-    out["n_seeds"] = len(rows)
-    summary[preset] = out
-
-with open(os.path.join(out_dir, "multi_seed_table.json"), "w") as f:
-    json.dump(summary, f, indent=2)
-
-print(f"{'preset':<16} {'Eff mean±SEM':<20} {'Gen mean±SEM':<20} {'Spec mean±SEM':<20}")
-for preset in ("pure_steer","ablate_routing","ablate_write","ablate_optim","all_grace"):
-    if preset not in summary: continue
-    s = summary[preset]
-    print(f"{preset:<16} {s['eff_mean']:.4f}±{s['eff_sem']:.4f}   "
-          f"{s['gen_mean']:.4f}±{s['gen_sem']:.4f}   "
-          f"{s['spec_mean']:.4f}±{s['spec_sem']:.4f}")
+print(f"{'preset':<16} {'n':>3}  seeds              "
+      f"{'Eff mean+-SEM':<22} {'Gen mean+-SEM':<22} {'Spec mean+-SEM':<22}")
+order = ["shard","ablate_routing","ablate_write","ablate_optim","all_grace"]
+for preset in order:
+    rows = sorted(by_preset.get(preset, []))
+    if not rows: continue
+    seeds = ",".join(str(r[0]) for r in rows)
+    def ms(xs):
+        m = st.mean(xs); s = st.stdev(xs) if len(xs) > 1 else 0.0
+        return m, s / math.sqrt(len(xs))
+    eff  = ms([r[1] for r in rows])
+    gen  = ms([r[2] for r in rows])
+    spec = ms([r[3] for r in rows])
+    print(f"{preset:<16} {len(rows):>3}  [{seeds:<10}]  "
+          f"{eff[0]:.4f}+-{eff[1]:.4f}       "
+          f"{gen[0]:.4f}+-{gen[1]:.4f}       "
+          f"{spec[0]:.4f}+-{spec[1]:.4f}")
 PY
 
 echo "[r2_08] $(date -Iseconds) done"
 echo
-echo "Next: replace single-seed cells in manuscript.tex tab:ablation with"
-echo "the mean±SEM values above; also update the surrounding discussion to"
-echo "cite the SEM-based ordering (the single-seed 0.001 gap between pure_steer"
-echo "and ablate_optim should now be clearly within SEM)."
+echo "Next: replace the single-seed cells in manuscript tab:ablation (§6.5)"
+echo "with the mean+-SEM values above."
